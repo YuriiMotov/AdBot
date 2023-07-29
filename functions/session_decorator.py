@@ -14,11 +14,11 @@ def set_session_maker(db_sessionmaker: sessionmaker) -> None:
 P = ParamSpec('P')
 R = TypeVar('R')
 
-def add_session(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
+def add_session(func: Callable[Concatenate[Session, P], Awaitable[R]]) -> Callable[P, Awaitable[R]]:
     
     async def async_inner(*args: P.args, **kwargs: P.kwargs) -> R:
         with _db_session_maker() as session:
-            result = await cast(Awaitable[R], func(session, *args, **kwargs))
+            result = await cast(Awaitable[R], func(session=session, *args, **kwargs))
         return result
     
     return wraps(func)(async_inner)

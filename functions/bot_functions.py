@@ -68,8 +68,6 @@ async def add_keyword(session: Session, user_data: dict, keyword: str) -> None:
         user_to_dict(user, user_data)
 
 
-
-
 @add_session
 async def remove_keyword(session: Session, user_data: dict, keyword: str) -> None:
     
@@ -98,3 +96,17 @@ async def set_forwarding_state(session: Session, user_data: dict, frwrd_state: b
     session.commit()
 
     user_to_dict(user, user_data)
+
+
+# Scheduler tasks
+
+@add_session
+async def forward_messages(session: Session) -> None:
+    print("Scheduled task started.")
+    st = select(m.GroupChatMessage).where(m.GroupChatMessage.processed == False)
+    for msg in session.scalars(st).all():
+        for user in msg.users:
+            print(f"Send message {msg.text} to user {user.id}")
+        msg.processed = True
+    session.commit()
+    

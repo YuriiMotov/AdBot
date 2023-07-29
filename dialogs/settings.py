@@ -3,9 +3,7 @@ from typing import Any, Awaitable
 from sqlalchemy.orm import Session
 from aiogram.filters.state import StatesGroup, State
 from aiogram.types import Message, CallbackQuery
-
 from magic_filter import F
-
 from aiogram_dialog import (
     Window,
     DialogManager,
@@ -62,7 +60,7 @@ async def data_getter(dialog_manager: DialogManager, **kwargs):
 
     if user:
         return {
-            # Need it because 'Select' doesn't allow to use function as a parameter 'item'
+            # Need it because 'Select' doesn't allow to use function or F as a parameter 'items'
             "keywords": user["keywords"]
         }
     else:
@@ -79,15 +77,12 @@ async def on_unexpected_input(
     manager.show_mode = ShowMode.EDIT
 
 
-
-
 # ======================================================================================================
 # Settings main window
 
 async def on_forwarding_toggle_click(
         callback: CallbackQuery, button: Button, manager: DialogManager
 ):
-    print('On click...')
     user = manager.dialog_data.get("user")
     if user:
         await bf.set_forwarding_state(user, not user["forwarding"])
@@ -112,7 +107,7 @@ settings_window = Window(
         "\n" \
             "✉ You have {dialog_data[user][msgs_queue_len]} forwarded messages in the queue. \n" \
              "Close the menu to see them.",
-        when=F["dialog_data"]["user"]["msgs_queue_len"] > -1
+        when=F["dialog_data"]["user"]["msgs_queue_len"] > 0
     ),
     Button(
         text=Case(
