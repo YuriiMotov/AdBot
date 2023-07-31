@@ -9,6 +9,8 @@ dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 class Settings(BaseSettings):
     BOT_TOKEN: SecretStr
     DB_DNS: str
+    API_ID: int
+    API_HASH: SecretStr
 
     class Config:
         env_file = dotenv_path

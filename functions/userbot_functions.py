@@ -1,32 +1,17 @@
-from typing import Awaitable
-import aiohttp
-
-#from aiogram.types import Message
-from sqlalchemy.orm import Session
 from hashlib import md5
 
+from sqlalchemy.orm import Session
+
 from db.models import GroupChatMessage
+from .session_decorator import add_session
 
 
-async def get_telegram_updates():
-    session: aiohttp.ClientSession
-
-    with aiohttp.ClientSession() as session:
-        async with session.get('http://python.org') as response:
-            if response.status == 200:
-                await process_events()
-            else:
-                print('Userbot error: error requesting updates')
-            
-
-
-async def add_groupchat_msg(session: Session, message: dict) -> Awaitable:
-    chat_msg = GroupChatMessage()
-    # chat_msg.url = message.get_url()
-    # chat_msg.text = message.text
-    # chat_msg.text_hash = md5(message.text, usedforsecurity=False).hexdigest()
+@add_session
+async def add_groupchat_msg(session: Session, text: str, url: str) -> None:
+    chat_msg = GroupChatMessage(
+        text=text,
+        url=url,
+        text_hash=md5(text, usedforsecurity=False).hexdigest()
+    )
     session.add(chat_msg)
-
-
-async def process_events():
-    pass
+    session.commit()

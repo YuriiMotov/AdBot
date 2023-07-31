@@ -54,6 +54,7 @@ async def main():
     bot = Bot(token=config.BOT_TOKEN.get_secret_value(), parse_mode='HTML')
     dp = Dispatcher(storage=storage)
 
+    # Set telegram menu commands for this bot
     await set_main_menu(bot)
 
     # Add DB seession object to callback's attributes
