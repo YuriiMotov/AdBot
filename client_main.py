@@ -7,54 +7,44 @@ from telethon.tl.custom.dialog import Dialog
 from config_reader import config
 from functions import userbot_functions as ubf
 
-MAX_DIALOG_HISTORY_MESSAGES_CNT = 10
-CHECK_NEW_MESSAGES_INTERVAL = 300
+MAX_DIALOG_HISTORY_MESSAGES_CNT = 100
+CHECK_NEW_MESSAGES_INTERVAL = 30
 
-client = TelegramClient('telethon.session', config.API_ID, config.API_HASH.get_secret_value())
+client = TelegramClient(
+    'telethon.session',
+    config.API_ID,
+    config.API_HASH.get_secret_value(),
+    system_version="4.16.30-vxCUSTOM"
 
-
-async def request_sms_code() -> str:
-    # Send message to admin via telegram bot:
-    # ask to check the SMS and forward code or follow the link inside to authorize userbot client
-    print('SMS code requested. Send message to admin and wait 1 minute')
-    # ToDo: send message via bot
-    sms_code = ''
-    await asyncio.sleep(60)
-    return sms_code
+)
 
 
 async def check_new_messages():
 
     async with client:
 
-        # Get list of dialogs
-        dialogs = await client.iter_dialogs()
+        # me = await client.get_me()
 
         dialog: Dialog
         message: Message
 
         # Iterate through chats and messages, add messages to DB
-        async for dialog in dialogs:
+        async for dialog in client.iter_dialogs():
             if dialog.is_channel or dialog.is_group:
                 unread_cnt = min(dialog.unread_count, MAX_DIALOG_HISTORY_MESSAGES_CNT)
+
+                max_msg_id = 0
+                my_chat = await client.get_entity(dialog)
+
                 async for message in client.iter_messages(dialog, unread_cnt):
-                    await ubf.add_groupchat_msg(message.message, f'{dialog.id}/{message.id}')
+                    sender = await client.get_entity(message.from_id)
+                    if message.message and not sender.bot:
+                        max_msg_id = max(max_msg_id, message.id)
+                        await ubf.add_groupchat_msg(message.message, f'https://t.me/c/{my_chat.id}/{message.id}')
                     await asyncio.sleep(0.1)
-           
+                    
+                if max_msg_id > 0:
+                    await client.send_read_acknowledge(my_chat, max_id=max_msg_id)
+
         # ToDo: check if the total time less than (CHECK_NEW_MESSAGES_INTERVAL / 2)
 
-
-async def main():
-
-    # start client first time to check whether it is authorized and authorize if it is needed
-    client.start(phone=config.PHONE, code_callback=request_sms_code)
-
-    while True:     # ToDo: add exit condition?
-        await check_new_messages()
-        asyncio.sleep(CHECK_NEW_MESSAGES_INTERVAL)
-
-
-
-
-if __name__ == '__main__':
-    asyncio.run(main)

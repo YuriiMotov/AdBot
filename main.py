@@ -10,11 +10,12 @@ from redis.asyncio.client import Redis
 from aiogram_dialog import DialogManager, StartMode, setup_dialogs
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from client_main import check_new_messages, CHECK_NEW_MESSAGES_INTERVAL
 from config_reader import config
 #from middlewares.db import DbSessionMiddleware
 from db import models
 from functions import session_decorator
-from functions.bot_functions import forward_messages
+from functions import bot_functions  as bf
 from dialogs import settings        # Import dialogs
 
 
@@ -67,12 +68,19 @@ async def main():
     dp.include_router(settings.dialog)
     setup_dialogs(dp)
 
-    # Set sessionmaker for modules
+    # Set sessionmaker and bot for modules
     session_decorator.set_session_maker(db_pool)
+    bf.bot = bot
 
     # Create and start scheduler
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(forward_messages, 'interval', seconds=30)
+    scheduler.add_job(bf.process_groupchat_messages, 'interval', seconds=30)
+    scheduler.add_job(check_new_messages, 'interval', seconds=CHECK_NEW_MESSAGES_INTERVAL)
+    scheduler.add_job(bf.forward_messages, 'interval', seconds=10)
+
+
+
+
     scheduler.start()
 
     # Start polling

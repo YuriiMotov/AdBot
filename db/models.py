@@ -36,6 +36,8 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)  # Telegram user ID
     telegram_name: Mapped[str] = mapped_column(Unicode(32))
     forwarding: Mapped[bool] = mapped_column(Boolean, default=False)
+    menu_closed: Mapped[bool] = mapped_column(Boolean, default=True)
+
     forward_queue: Mapped[List["GroupChatMessage"]] = relationship(
         secondary=user_message_link, back_populates="users"
     )

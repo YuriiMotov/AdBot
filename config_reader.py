@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     DB_DNS: str
     API_ID: int
     API_HASH: SecretStr
+    PHONE: str
 
     class Config:
         env_file = dotenv_path
