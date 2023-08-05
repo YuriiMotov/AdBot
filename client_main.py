@@ -7,7 +7,7 @@ from telethon.tl.custom.dialog import Dialog
 from config_reader import config
 from functions import userbot_functions as ubf
 
-MAX_DIALOG_HISTORY_MESSAGES_CNT = 100
+MAX_DIALOG_HISTORY_MESSAGES_CNT = 300
 CHECK_NEW_MESSAGES_INTERVAL = 30
 
 client = TelegramClient(
@@ -39,8 +39,13 @@ async def check_new_messages():
                 async for message in client.iter_messages(dialog, unread_cnt):
                     sender = await client.get_entity(message.from_id)
                     if message.message and not sender.bot:
+                        if hasattr(my_chat, 'username') and my_chat.username:
+                            link = f'https://t.me/{my_chat.username}/{message.id}'
+                        else:
+                            link = f'https://t.me/c/{my_chat.id}/{message.id}'
+                        await ubf.add_groupchat_msg(message.message, link)
+
                         max_msg_id = max(max_msg_id, message.id)
-                        await ubf.add_groupchat_msg(message.message, f'https://t.me/c/{my_chat.id}/{message.id}')
                     await asyncio.sleep(0.1)
                     
                 if max_msg_id > 0:

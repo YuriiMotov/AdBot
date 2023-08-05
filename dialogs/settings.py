@@ -32,39 +32,28 @@ class SettingsSG(StatesGroup):
     main = State()
     manage_keywords = State()
     remove_keyword = State()
+    dialog_closed = State()
 
 
 # ======================================================================================================
 # Common dialog functions
 
 async def data_getter(dialog_manager: DialogManager, **kwargs):
-    user: dict = None
-    if "user" not in dialog_manager.dialog_data:
-        dialog_manager.dialog_data.update(
-            user_id=int(dialog_manager.event.from_user.id)
-        )
+
+    if 'user_id' not in dialog_manager.dialog_data:
+        dialog_manager.dialog_data['user_id'] = int(dialog_manager.event.from_user.id)
+
+    user = await bf.get_user(int(dialog_manager.dialog_data.get("user_id")))
+    # Create user if not exists in DB
+    if user is None:
         user_name = dialog_manager.event.from_user.username
-        user = await bf.get_user(dialog_manager.dialog_data.get("user_id"))
+        user = await bf.add_user(
+            int(dialog_manager.dialog_data.get("user_id")), user_name
+        )
 
-        # TODO: handle DB access error
+    dialog_manager.dialog_data["user"] = user
 
-        # Create user if not exists in DB
-        if user is None:
-            user = await bf.add_user(
-                dialog_manager.dialog_data.get("user_id"), user_name
-            )
-
-        dialog_manager.dialog_data["user"] = user
-    else:
-        user = dialog_manager.dialog_data["user"]
-
-    if user:
-        return {
-            # Need it because 'Select' doesn't allow to use function or F as a parameter 'items'
-            "keywords": user["keywords"]
-        }
-    else:
-        return {}
+    return {}
 
 
 async def on_unexpected_input(
@@ -77,6 +66,12 @@ async def on_unexpected_input(
     manager.show_mode = ShowMode.EDIT
 
 
+async def on_menu_navigate_click(
+        callback: CallbackQuery, button: Button, manager: DialogManager
+):
+    await bf.reset_inactivity_timer(int(manager.event.from_user.id))
+
+
 # ======================================================================================================
 # Settings main window
 
@@ -85,7 +80,7 @@ async def on_forwarding_toggle_click(
 ):
     user = manager.dialog_data.get("user")
     if user:
-        await bf.set_forwarding_state(user, not user["forwarding"])
+        manager.dialog_data['user'] = await bf.set_forwarding_state(user['id'], not user["forwarding"])
 
 
 settings_window = Window(
@@ -93,8 +88,7 @@ settings_window = Window(
         Const("Forwarding state:"),
         Case(
             {True: Const("enabled"), False: Const("disabled")},
-            selector=lambda d, *x: d['dialog_data']['user']['forwarding']
-            # change to F["dialog_data"]["user"]["forwarding"] when it is fixed in library
+            selector=F["dialog_data"]["user"]["forwarding"]
         ),
         sep=" ",
     ),
@@ -115,8 +109,7 @@ settings_window = Window(
                     True: Const("Disable message forwarding"),
                     False: Const("Enable message forwarding")
                 },
-                selector=lambda d, *x: d['dialog_data']['user']['forwarding']
-                # change to F["dialog_data"]["user"]["forwarding"] when it is fixed in library
+                selector=F["dialog_data"]["user"]["forwarding"]
         ),
         on_click=on_forwarding_toggle_click,
         id="forwarding_toggle",
@@ -125,6 +118,7 @@ settings_window = Window(
         text=Const("Manage keywords"),
         id="manage_keywords_btn",
         state=SettingsSG.manage_keywords,
+        on_click=on_menu_navigate_click
     ),
     Cancel(text=Const("Close menu")),
     MessageInput(on_unexpected_input),
@@ -141,7 +135,7 @@ async def on_keyword_add_input(
     """ """
     user = manager.dialog_data.get("user")
     if user:
-        await bf.add_keyword(user, message.text.strip())
+        manager.dialog_data['user'] = await bf.add_keyword(user['id'], message.text.strip())
     else:
         pass  # TODO: Show error message
 
@@ -160,11 +154,10 @@ manage_keywords_window = Window(
         when=F["dialog_data"]["user"]["keywords"].len() > 0,
         sep="\n",
     ),
-
-    Const(
+    Format(
         "\n" \
             "<b>Attention!</b> \n" \
-            "The amount of keywords in your list is limited by 10. \n" \
+            "The amount of keywords in your list is limited by {dialog_data[user][keywords_limit}. \n" \
             "<u>To add new keywords</u> you have to <u>remove</u> some existing keywords from your list.",
         when=(F["dialog_data"]["user"]["keywords"].len() >= F["dialog_data"]["user"]["keywords_limit"])
     ),
@@ -179,6 +172,7 @@ manage_keywords_window = Window(
         text=Const("Remove keywords"),
         id="remove_keywords",
         state=SettingsSG.remove_keyword,
+        on_click=on_menu_navigate_click
     ),
     SwitchTo(text=Const("Back"), id="back_to_main", state=SettingsSG.main),
     state=SettingsSG.manage_keywords,
@@ -193,7 +187,7 @@ async def on_remove_kw_selected(
 ):
     user = manager.dialog_data.get("user")
     if user:
-        await bf.remove_keyword(user, item_id)
+        manager.dialog_data['user'] = await bf.remove_keyword(user['id'], item_id)
 
 
 remove_keyword_window = Window(
@@ -210,43 +204,55 @@ remove_keyword_window = Window(
         Select(
             Format("❌ {item}"),
             id="remove_keyword_select",
-            items='keywords',
+            items=F['dialog_data']['user']['keywords'],
             item_id_getter=lambda a: a,
             on_click=on_remove_kw_selected,
         ),
         width=2,
         when=F["dialog_data"]["user"]["keywords"].len() > 0,
     ),
-    SwitchTo(text=Const("Back"), id="manage_keywords_btn", state=SettingsSG.manage_keywords),
+    SwitchTo(
+        text=Const("Back"),
+        id="manage_keywords_btn",
+        state=SettingsSG.manage_keywords,
+        on_click=on_menu_navigate_click
+    ),
     state=SettingsSG.remove_keyword,
 )
 
 
 # ======================================================================================================
-# Processing subdialog results
+# 'Dialog closed' window
 
-async def process_result(start_data: Data, result: Any, manager: DialogManager):
-    """
-    Called when subdialog is finished.
-    Just show the main menu as a new message.
-    """
-    manager.show_mode = ShowMode.SEND
-    await manager.done()
+dialog_closed_window = Window(
+    Const("Dialog closed"),
+    state=SettingsSG.dialog_closed,
+)
 
 
 # ======================================================================================================
 # Dialog object
 
-async def on_dialog_close(ddd: Any, manager: DialogManager):
-    pass
-    
+async def on_dialog_start(start_data: Any, manager: DialogManager):
+    user_id = int(manager.event.from_user.id)
+    await bf.reset_inactivity_timer(user_id)
+    await bf.refresh_user_data(user_id)
+    await bf.set_menu_closed_state(user_id, False)
 
 
+async def on_dialog_close(result: Any, manager: DialogManager):
+    await bf.set_menu_closed_state(int(manager.event.from_user.id), True)
+    manager.show_mode = ShowMode.EDIT
+    await manager.switch_to(SettingsSG.dialog_closed)
+    await manager.show()
+
+ 
 dialog = Dialog(
     settings_window,
     manage_keywords_window,
     remove_keyword_window,
-    on_process_result=process_result,
+    dialog_closed_window,
     getter=data_getter,
-    on_close=on_dialog_close
+    on_start=on_dialog_start,
+    on_close=on_dialog_close,
 )

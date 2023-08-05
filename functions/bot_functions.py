@@ -1,118 +1,115 @@
+from datetime import datetime
 from typing import Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import select, insert
-from aiogram import Bot
 
+from aiogram import Bot, Dispatcher
+from aiogram.types import Chat, User, Message, Update
+from sqlalchemy.orm import Session
+
+from .data_cached import DataCached, UserDict
 from .session_decorator import add_session
-from db import models as m
-from .keywords_cache import keywords_cached
+
+data: DataCached = DataCached()
 
 bot: Bot = None
-
-
-def user_to_dict(user: m.User, user_dict: Optional[dict] = None) -> dict:
-    if user_dict is None:
-        user_dict = {}   
-    user_dict['id'] = user.id
-    user_dict['forwarding'] = user.forwarding
-    user_dict['keywords'] = [kw.word for kw in user.keywords]
-    user_dict['keywords_limit'] = 10
-    user_dict['msgs_queue_len'] = len(user.forward_queue)
-    return user_dict
+dp: Dispatcher = None
 
 
 @add_session
-async def get_user(session: Session, user_id: int) -> Optional[dict]:
-    user = session.get(m.User, user_id)
-    if user:
-        return user_to_dict(user)
-    else:
-        return None
+async def get_user(session: Session, user_id: int) -> Optional[UserDict]:
+    return await data.get_user_data(session, user_id)
 
 
 @add_session
-async def add_user(session: Session, user_id: int, user_name: str) -> Optional[dict]:
-    user = m.User()
-    user.id = user_id
-    user.telegram_name = user_name
-    session.add(user)
-    session.commit()
-    # TODO: Add error handling  
-    return user_to_dict(user)
+async def add_user(session: Session, user_id: int, user_name: str) -> Optional[UserDict]:
+    return await data.add_user(session, user_id, user_name)
 
 
 @add_session
-async def add_keyword(session: Session, user_data: dict, keyword: str) -> None:
-    keyword = keyword.lower().strip()
-    user = session.get(m.User, user_data['id'])
-    if len(user.keywords) < user_data['keywords_limit']:
-        st = select(m.Keyword).where(m.Keyword.word == keyword)
-        kw = session.scalars(st).one_or_none()
-        if kw is None:
-            kw = m.Keyword(word=keyword)
-        if kw not in user.keywords:
-            user.keywords.append(kw)
-            keywords_cached.request_update()
-        session.add_all([user, kw])
-        session.commit()
-        # TODO: Add error handling
-        user_to_dict(user, user_data)
+async def add_keyword(session: Session, user_id: int, keyword: str) -> UserDict:
+    return await data.add_keyword(session, user_id, keyword)
 
 
 @add_session
-async def remove_keyword(session: Session, user_data: dict, keyword: str) -> None:
-    # TODO: Add error handling
-    st = select(m.Keyword).where(m.Keyword.word == keyword)
-    kw = session.scalars(st).one_or_none()
-    if kw is not None:
-        user = session.get(m.User, user_data['id'])
-        if kw in user.keywords:
-            user.keywords.remove(kw)
-            # session.add_all([user, kw])
-            session.commit()
-            keywords_cached.request_update()
-            user_to_dict(user, user_data)
+async def remove_keyword(session: Session, user_id: int, keyword: str) -> UserDict:
+    return await data.remove_keyword(session, user_id, keyword)
 
 
 @add_session
-async def set_forwarding_state(session: Session, user_data: dict, frwrd_state: bool) -> None:
-    user = session.get(m.User, user_data['id'])
-    user.forwarding = frwrd_state
-    session.commit()
-    keywords_cached.request_update()
-    user_to_dict(user, user_data)
+async def set_forwarding_state(session: Session, user_id: int, new_state: bool) -> UserDict:
+    return await data.set_forwarding_state(session, user_id, new_state)
+
+
+@add_session
+async def set_menu_closed_state(session: Session, user_id: int, closed: bool) -> None:
+    return await data.set_menu_closed_state(session, user_id, closed)
+
+
+@add_session
+async def get_menu_closed_state(session: Session, user_id: int) -> None:
+    return await data.get_menu_closed_state(session, user_id)
+
+
+@add_session
+async def reset_inactivity_timer(session: Session, user_id: int) -> None:
+    return await data.reset_inactivity_timer(session, user_id)
+
+
+@add_session
+async def refresh_user_data(session: Session, user_id: int) -> None:
+    return await data.refresh_user_data(session, user_id)
+
 
 
 # Scheduler tasks
 
 @add_session
 async def forward_messages(session: Session) -> None:
-    st = select(m.User).where(m.User.forwarding == True).where(m.User.menu_closed == True)
-    users = session.scalars(st).all()
-    for user in users:
-        for msg in user.forward_queue:
-            await bot.send_message(
-                        chat_id=user.id,
-                        text=f'{msg.text}\n{msg.url}',
-                        disable_notification=True
-            )
-            msg_short = msg.text[:20].replace('\n', '')
-            print(f"Sended message: '{msg_short}' to user {user.id}")
-            user.forward_queue.remove(msg)
-    session.commit()
-        
+    async def forward_msg(user_id: int, msg_text: str) -> bool:
+        await bot.send_message(
+            chat_id=user_id,
+            text=msg_text,
+            disable_notification=True
+        )
+        return True
+
+    await data.forward_msgs(session, forward_msg)
+
 
 @add_session
 async def process_groupchat_messages(session: Session):
-    keywords = keywords_cached.get_keywords(session)
-    st = select(m.GroupChatMessage).where(m.GroupChatMessage.processed == False)
-    msgs = session.scalars(st).all()
-    for msg in msgs:
-        msg_text = msg.text.lower()
-        for kw, user_ids in keywords.items():
-            if kw in msg_text:
-                for user_id in user_ids:
-                    user = session.get(m.User, user_id)
-                    user.forward_queue.append(msg)
-        msg.processed = True
-    session.commit()
+    await data.process_groupchat_messages(session)
+
+
+@add_session
+async def check_opened_dialogs(session: Session) -> None:
+    # Close dialogs of incative users
+    user_ids = await data.get_inactive_users(session)
+    for user_id in user_ids:
+        await _bot_send_command(user_id, '/close_dialog')
+
+    # Refrech dialogs for active users
+    user_ids = await data.get_active_users(session)
+    for user_id in user_ids:
+        await data.refresh_user_data(session, user_id)          # Refresh data in the cache
+        await _bot_send_command(user_id, '/refresh_dialog')     # Send cmd to refresh window
+
+
+async def _bot_send_command(user_id: int, command: str) -> None:
+    user = User(id=user_id, is_bot=False, first_name='')
+    chat = Chat(id=user_id, type='private')
+    message = Message(
+        message_id=0,
+        date=datetime.now(),
+        chat=chat,
+        from_user=user,
+        text=command
+    )
+    update = Update(update_id=0, message=message)
+    await dp.propagate_event(
+        update_type="update",
+        event=update,
+        bot=bot,
+        event_from_user=user,
+        event_chat=chat,
+        **dp.workflow_data
+    )

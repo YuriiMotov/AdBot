@@ -1,7 +1,7 @@
 import os
 
-from pydantic import SecretStr, BaseSettings
-#from pydantic_settings import BaseSettings
+from pydantic import SecretStr
+from pydantic_settings import BaseSettings
 
 start_path = os.path.dirname(__file__)
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
