@@ -1,6 +1,5 @@
-from typing import Any, Awaitable
+from typing import Any
 
-from sqlalchemy.orm import Session
 from aiogram.filters.state import StatesGroup, State
 from aiogram.types import Message, CallbackQuery
 from magic_filter import F
@@ -8,7 +7,6 @@ from aiogram_dialog import (
     Window,
     DialogManager,
     DialogProtocol,
-    Data,
     ShowMode,
 )
 from aiogram_dialog.widgets.kbd import (
@@ -84,18 +82,31 @@ async def on_forwarding_toggle_click(
 
 
 settings_window = Window(
+    # Forwarding state
     Multi(
-        Const("Forwarding state:"),
+        Const("<b>Forwarding state:</b>"),
         Case(
-            {True: Const("enabled"), False: Const("disabled")},
+            {True: Const("✅ enabled"), False: Const("☑ disabled")},
             selector=F["dialog_data"]["user"]["forwarding"]
         ),
         sep=" ",
     ),
+    # List of keywords
+    Const(
+        "<b>Your list of keywords is empty.</b>",
+        when=F["dialog_data"]["user"]["keywords"].len() == 0,
+    ),
+    Multi(
+        Const("<b>Your list of keywords:</b>"),
+        List(Format("  - {item}"), items=F["dialog_data"]["user"]["keywords"]),
+        when=F["dialog_data"]["user"]["keywords"].len() > 0,
+        sep="\n",
+    ),
+    # Warn that forwarding is suspended
     Const(
         "\n" \
             "<b>Attention!</b> \n"\
-            "Message forwarding is paused when this menu is opened."
+            "Message forwarding is suspended when this menu is open."
         ),
     Format(
         "\n" \
@@ -103,6 +114,7 @@ settings_window = Window(
              "Close the menu to see them.",
         when=F["dialog_data"]["user"]["msgs_queue_len"] > 0
     ),
+
     Button(
         text=Case(
                 {
@@ -150,7 +162,7 @@ manage_keywords_window = Window(
     ),
     Multi(
         Const("<b>Your list of keywords:</b>"),
-        List(Format("  - {item}"), items=lambda d: d["dialog_data"]["user"]["keywords"]),
+        List(Format("  - {item}"), items=F["dialog_data"]["user"]["keywords"]),
         when=F["dialog_data"]["user"]["keywords"].len() > 0,
         sep="\n",
     ),
@@ -225,7 +237,31 @@ remove_keyword_window = Window(
 # 'Dialog closed' window
 
 dialog_closed_window = Window(
-    Const("Dialog closed"),
+    Multi(
+        Const("<b>Forwarding state:</b>"),
+        Case(
+            {True: Const("✅ enabled"), False: Const("☑ disabled")},
+            selector=F["dialog_data"]["user"]["forwarding"]
+        ),
+        sep=" ",
+    ),
+    # List of keywords
+    Const(
+        "<b>Your list of keywords is empty.</b>",
+        when=F["dialog_data"]["user"]["keywords"].len() == 0,
+    ),
+    Multi(
+        Const("<b>Your list of keywords:</b>"),
+        List(Format("  - {item}"), items=F["dialog_data"]["user"]["keywords"]),
+        when=F["dialog_data"]["user"]["keywords"].len() > 0,
+        sep="\n",
+    ),
+
+    Const(
+        "\n" \
+        "Settings menu is closed.\n" \
+        "To open it again choose /settings command in the bot menu or type /settings."
+        ),
     state=SettingsSG.dialog_closed,
 )
 

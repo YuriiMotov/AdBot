@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
 from aiogram.types import Message, BotCommand
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import Command
 from redis.asyncio.client import Redis
 from aiogram_dialog import DialogManager, StartMode, setup_dialogs, ShowMode
 from aiogram_dialog.api.exceptions import NoContextError
@@ -79,7 +79,7 @@ async def main():
     #dp.update.middleware(DbSessionMiddleware(session_pool=db_pool))
 
     # Register 'start' command handler
-    dp.message.register(start, CommandStart())
+    dp.message.register(start, Command('start', 'settings', 'menu'))
     dp.message.register(dialog_close, Command('close_dialog'))
     dp.message.register(dialog_refresh, Command('refresh_dialog'))
 
