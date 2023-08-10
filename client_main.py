@@ -8,7 +8,7 @@ from config_reader import config
 from functions import userbot_functions as ubf
 
 MAX_DIALOG_HISTORY_MESSAGES_CNT = 500
-CHECK_NEW_MESSAGES_INTERVAL = 300
+CHECK_NEW_MESSAGES_INTERVAL = 30
 
 client = TelegramClient(
     'telethon.session',

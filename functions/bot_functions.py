@@ -88,9 +88,8 @@ async def check_opened_dialogs(session: Session) -> None:
         await _bot_send_command(user_id, '/close_dialog')
 
     # Refrech dialogs for active users
-    user_ids = await data.get_active_users(session)
+    user_ids = await data.refresh_users_data(session)
     for user_id in user_ids:
-        await data.refresh_user_data(session, user_id)          # Refresh data in the cache
         await _bot_send_command(user_id, '/refresh_dialog')     # Send cmd to refresh window
 
 

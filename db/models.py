@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from sqlalchemy import Table, Column, String, Boolean, ForeignKey, UnicodeText, Unicode
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, query_expression
 
 
 class Base(DeclarativeBase):
@@ -34,9 +34,10 @@ class User(Base):
     __tablename__ = "user_account"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)  # Telegram user ID
-    telegram_name: Mapped[str] = mapped_column(Unicode(32))
+    telegram_name: Mapped[str] = mapped_column(Unicode(32), default=None)
     forwarding: Mapped[bool] = mapped_column(Boolean, default=False)
     menu_closed: Mapped[bool] = mapped_column(Boolean, default=True)
+    forward_queue_len: Mapped[int] = query_expression()
 
     forward_queue: Mapped[List["GroupChatMessage"]] = relationship(
         secondary=user_message_link, back_populates="users"

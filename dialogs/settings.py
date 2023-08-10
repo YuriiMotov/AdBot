@@ -112,7 +112,7 @@ settings_window = Window(
         "\n" \
             "✉ You have {dialog_data[user][msgs_queue_len]} forwarded messages in the queue. \n" \
              "Close the menu to see them.",
-        when=F["dialog_data"]["user"]["msgs_queue_len"] > 0
+       when=F["dialog_data"]["user"]["msgs_queue_len"] > 0
     ),
 
     Button(
