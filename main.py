@@ -1,14 +1,15 @@
 import asyncio
+import logging
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
 from aiogram.types import Message, BotCommand
-from aiogram.filters import Command
+from aiogram.filters import Command, ExceptionTypeFilter
 from redis.asyncio.client import Redis
 from aiogram_dialog import DialogManager, StartMode, setup_dialogs, ShowMode
-from aiogram_dialog.api.exceptions import NoContextError
+from aiogram_dialog.api.exceptions import NoContextError, UnknownIntent, UnknownState
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from client_main import check_new_messages, CHECK_NEW_MESSAGES_INTERVAL
@@ -19,10 +20,20 @@ from functions import session_decorator
 from functions import bot_functions  as bf
 from dialogs import settings        # Import dialogs
 
+logger = logging.getLogger(__name__)
+
 
 async def start(message: Message, dialog_manager: DialogManager):
-    await message.delete()
-    await dialog_manager.start(settings.SettingsSG.main, mode=StartMode.RESET_STACK)
+
+    user_id = message.from_user.id
+    user_name = message.from_user.username
+    user_data = await bf.get_user_add_refresh_reset(user_id, user_name)
+    if user_data:
+        await message.delete()
+        await dialog_manager.start(settings.SettingsSG.main, mode=StartMode.RESET_STACK)
+    else:
+        logger.error(f'DB error in start command handler')
+        await message.answer("Service unavailable. Please try later.")
 
 
 async def dialog_close(message: Message, dialog_manager: DialogManager):
@@ -40,6 +51,25 @@ async def dialog_refresh(message: Message, dialog_manager: DialogManager):
         pass
 
 
+async def on_db_error(event, dialog_manager: DialogManager):
+    logging.error("DB error exception: %s. Switch to error message window", event.exception)
+    await dialog_manager.start(
+        settings.SettingsSG.db_error, mode=StartMode.RESET_STACK, show_mode=ShowMode.EDIT,
+    )
+
+async def on_unknown_intent(event, dialog_manager: DialogManager):
+    logging.error("Restarting dialog: %s", event.exception)
+    await dialog_manager.start(
+        settings.SettingsSG.main, mode=StartMode.RESET_STACK, show_mode=ShowMode.EDIT,
+    )
+
+
+async def on_unknown_state(event, dialog_manager: DialogManager):
+    logging.error("Restarting dialog: %s", event.exception)
+    await dialog_manager.start(
+        settings.SettingsSG.main, mode=StartMode.RESET_STACK, show_mode=ShowMode.EDIT,
+    )
+
 
 async def set_main_menu(bot: Bot):
     main_menu_commands = [
@@ -56,6 +86,13 @@ async def set_main_menu(bot: Bot):
 
 
 async def main():
+
+    logging.basicConfig(
+        filename='logs/main.log',
+        level=logging.ERROR
+    )
+
+
     # Creating DB engine and connections pool
     engine = create_engine(config.DB_DNS, pool_pre_ping=True)
     db_pool = sessionmaker(bind=engine)
@@ -83,6 +120,16 @@ async def main():
     dp.message.register(dialog_close, Command('close_dialog'))
     dp.message.register(dialog_refresh, Command('refresh_dialog'))
 
+    # Set error handlers
+    dp.errors.register(on_db_error, ExceptionTypeFilter(settings.DBErrorException))
+    dp.errors.register(
+        on_unknown_intent,
+        ExceptionTypeFilter(UnknownIntent),
+    )
+    dp.errors.register(
+        on_unknown_state,
+        ExceptionTypeFilter(UnknownState),
+    )
 
     # Register dialogs and setup dialogs
     dp.include_router(settings.dialog)

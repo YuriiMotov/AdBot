@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from aiogram.filters.state import StatesGroup, State
@@ -22,6 +23,12 @@ from aiogram_dialog.widgets.input import MessageInput
 
 from functions import bot_functions as bf
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+class DBErrorException(Exception):
+    pass
+
 
 # ======================================================================================================
 # Settings dialog's states
@@ -31,27 +38,22 @@ class SettingsSG(StatesGroup):
     manage_keywords = State()
     remove_keyword = State()
     dialog_closed = State()
+    db_error = State()
 
 
 # ======================================================================================================
 # Common dialog functions
 
+async def get_user_data(manager: DialogManager) -> bf.UserDict:
+    return await bf.get_user(int(manager.event.from_user.id))
+
+
 async def data_getter(dialog_manager: DialogManager, **kwargs):
-
-    if 'user_id' not in dialog_manager.dialog_data:
-        dialog_manager.dialog_data['user_id'] = int(dialog_manager.event.from_user.id)
-
-    user = await bf.get_user(int(dialog_manager.dialog_data.get("user_id")))
-    # Create user if not exists in DB
-    if user is None:
-        user_name = dialog_manager.event.from_user.username
-        user = await bf.add_user(
-            int(dialog_manager.dialog_data.get("user_id")), user_name
-        )
-
-    dialog_manager.dialog_data["user"] = user
-
-    return {}
+    user_data = await get_user_data(dialog_manager)
+    if user_data:
+        return {'user': user_data}
+    else:
+        raise DBErrorException()
 
 
 async def on_unexpected_input(
@@ -67,7 +69,7 @@ async def on_unexpected_input(
 async def on_menu_navigate_click(
         callback: CallbackQuery, button: Button, manager: DialogManager
 ):
-    await bf.reset_inactivity_timer(int(manager.event.from_user.id))
+    await bf.reset_inactivity_timer(manager.event.from_user.id)
 
 
 # ======================================================================================================
@@ -76,10 +78,13 @@ async def on_menu_navigate_click(
 async def on_forwarding_toggle_click(
         callback: CallbackQuery, button: Button, manager: DialogManager
 ):
-    user = manager.dialog_data.get("user")
-    if user:
-        manager.dialog_data['user'] = await bf.set_forwarding_state(user['id'], not user["forwarding"])
-
+    user_data = await get_user_data(manager)
+    if user_data is None:
+        logging.error(f'on_forwarding_toggle_click, user data is None')
+        return
+    if (await bf.set_forwarding_state(user_data['id'], not user_data["forwarding"])) == False:
+        logging.error(f'on_forwarding_toggle_click, set_forwarding_state returned False')
+        return
 
 settings_window = Window(
     # Forwarding state
@@ -87,19 +92,19 @@ settings_window = Window(
         Const("<b>Forwarding state:</b>"),
         Case(
             {True: Const("✅ enabled"), False: Const("☑ disabled")},
-            selector=F["dialog_data"]["user"]["forwarding"]
+            selector=F["user"]["forwarding"]
         ),
         sep=" ",
     ),
     # List of keywords
     Const(
         "<b>Your list of keywords is empty.</b>",
-        when=F["dialog_data"]["user"]["keywords"].len() == 0,
+        when=F["user"]["keywords"].len() == 0,
     ),
     Multi(
         Const("<b>Your list of keywords:</b>"),
-        List(Format("  - {item}"), items=F["dialog_data"]["user"]["keywords"]),
-        when=F["dialog_data"]["user"]["keywords"].len() > 0,
+        List(Format("  - {item}"), items=F["user"]["keywords"]),
+        when=F["user"]["keywords"].len() > 0,
         sep="\n",
     ),
     # Warn that forwarding is suspended
@@ -110,9 +115,9 @@ settings_window = Window(
         ),
     Format(
         "\n" \
-            "✉ You have {dialog_data[user][msgs_queue_len]} forwarded messages in the queue. \n" \
+            "✉ You have {user[msgs_queue_len]} forwarded messages in the queue. \n" \
              "Close the menu to see them.",
-       when=F["dialog_data"]["user"]["msgs_queue_len"] > 0
+       when=F["user"]["msgs_queue_len"] > 0
     ),
 
     Button(
@@ -121,7 +126,7 @@ settings_window = Window(
                     True: Const("Disable message forwarding"),
                     False: Const("Enable message forwarding")
                 },
-                selector=F["dialog_data"]["user"]["forwarding"]
+                selector=F["user"]["forwarding"]
         ),
         on_click=on_forwarding_toggle_click,
         id="forwarding_toggle",
@@ -134,6 +139,7 @@ settings_window = Window(
     ),
     Cancel(text=Const("Close menu")),
     MessageInput(on_unexpected_input),
+    getter=data_getter,
     state=SettingsSG.main,
 )
 
@@ -145,12 +151,9 @@ async def on_keyword_add_input(
     message: Message, dialog: DialogProtocol, manager: DialogManager
 ):
     """ """
-    user = manager.dialog_data.get("user")
-    if user:
-        manager.dialog_data['user'] = await bf.add_keyword(user['id'], message.text.strip())
-    else:
-        pass  # TODO: Show error message
-
+    user_id = manager.event.from_user.id
+    if not (await bf.add_keyword(user_id, message.text.strip())):
+        logger.error(f'on_keyword_add_input {user_id}, add_keyword failed')
     await message.delete()
     manager.show_mode = ShowMode.EDIT
 
@@ -158,25 +161,25 @@ async def on_keyword_add_input(
 manage_keywords_window = Window(
     Const(
         "<b>Your list of keywords is empty.</b>",
-        when=F["dialog_data"]["user"]["keywords"].len() == 0,
+        when=F["user"]["keywords"].len() == 0,
     ),
     Multi(
         Const("<b>Your list of keywords:</b>"),
-        List(Format("  - {item}"), items=F["dialog_data"]["user"]["keywords"]),
-        when=F["dialog_data"]["user"]["keywords"].len() > 0,
+        List(Format("  - {item}"), items=F["user"]["keywords"]),
+        when=F["user"]["keywords"].len() > 0,
         sep="\n",
     ),
     Format(
         "\n" \
             "<b>Attention!</b> \n" \
-            "The amount of keywords in your list is limited by {dialog_data[user][keywords_limit}. \n" \
+            "The amount of keywords in your list is limited by {user[keywords_limit}. \n" \
             "<u>To add new keywords</u> you have to <u>remove</u> some existing keywords from your list.",
-        when=(F["dialog_data"]["user"]["keywords"].len() >= F["dialog_data"]["user"]["keywords_limit"])
+        when=(F["user"]["keywords"].len() >= F["user"]["keywords_limit"])
     ),
     Const(
         "\n" \
             "<u>To add a keyword write it in the chat</u>",
-        when=(F["dialog_data"]["user"]["keywords"].len() < F["dialog_data"]["user"]["keywords_limit"])
+        when=(F["user"]["keywords"].len() < F["user"]["keywords_limit"])
     ),
 
     MessageInput(on_keyword_add_input),
@@ -186,8 +189,14 @@ manage_keywords_window = Window(
         state=SettingsSG.remove_keyword,
         on_click=on_menu_navigate_click
     ),
-    SwitchTo(text=Const("Back"), id="back_to_main", state=SettingsSG.main),
+    SwitchTo(
+        text=Const("Back"),
+        id="back_to_main",
+        state=SettingsSG.main,
+        on_click=on_menu_navigate_click
+    ),
     state=SettingsSG.manage_keywords,
+    getter=data_getter,
 )
 
 
@@ -197,31 +206,32 @@ manage_keywords_window = Window(
 async def on_remove_kw_selected(
     callback: CallbackQuery, widget: Any, manager: DialogManager, item_id: str
 ):
-    user = manager.dialog_data.get("user")
-    if user:
-        manager.dialog_data['user'] = await bf.remove_keyword(user['id'], item_id)
+    user_id = manager.event.from_user.id
+    if not await bf.remove_keyword(user_id, item_id):
+        logger.error(f'on_remove_kw_selected {user_id}, remove_keyword failed')
+        callback.answer("Error..", show_alert=True)
 
 
 remove_keyword_window = Window(
     Const(
         "Your list of keywords is empty.",
-        when=F["dialog_data"]["user"]["keywords"].len() == 0,
+        when=F["user"]["keywords"].len() == 0,
     ),
     Const(
         "Choose keywords to remove:",
-        when=F["dialog_data"]["user"]["keywords"].len() > 0,
+        when=F["user"]["keywords"].len() > 0,
     ),
     MessageInput(on_unexpected_input),
     Group(
         Select(
             Format("❌ {item}"),
             id="remove_keyword_select",
-            items=F['dialog_data']['user']['keywords'],
+            items=F["user"]["keywords"],
             item_id_getter=lambda a: a,
             on_click=on_remove_kw_selected,
         ),
         width=2,
-        when=F["dialog_data"]["user"]["keywords"].len() > 0,
+        when=F["user"]["keywords"].len() > 0,
     ),
     SwitchTo(
         text=Const("Back"),
@@ -230,6 +240,7 @@ remove_keyword_window = Window(
         on_click=on_menu_navigate_click
     ),
     state=SettingsSG.remove_keyword,
+    getter=data_getter,
 )
 
 
@@ -241,19 +252,19 @@ dialog_closed_window = Window(
         Const("<b>Forwarding state:</b>"),
         Case(
             {True: Const("✅ enabled"), False: Const("☑ disabled")},
-            selector=F["dialog_data"]["user"]["forwarding"]
+            selector=F["user"]["forwarding"]
         ),
         sep=" ",
     ),
     # List of keywords
     Const(
         "<b>Your list of keywords is empty.</b>",
-        when=F["dialog_data"]["user"]["keywords"].len() == 0,
+        when=F["user"]["keywords"].len() == 0,
     ),
     Multi(
         Const("<b>Your list of keywords:</b>"),
-        List(Format("  - {item}"), items=F["dialog_data"]["user"]["keywords"]),
-        when=F["dialog_data"]["user"]["keywords"].len() > 0,
+        List(Format("  - {item}"), items=F["user"]["keywords"]),
+        when=F["user"]["keywords"].len() > 0,
         sep="\n",
     ),
 
@@ -263,21 +274,24 @@ dialog_closed_window = Window(
         "To open it again choose /settings command in the bot menu or type /settings."
         ),
     state=SettingsSG.dialog_closed,
+    getter=data_getter,
+)
+
+
+# ======================================================================================================
+# 'Dialog closed' window
+
+db_error_window = Window(
+    Const("<b>DB connection error. Please try later.</b>"),
+    state=SettingsSG.db_error,
 )
 
 
 # ======================================================================================================
 # Dialog object
 
-async def on_dialog_start(start_data: Any, manager: DialogManager):
-    user_id = int(manager.event.from_user.id)
-    await bf.reset_inactivity_timer(user_id)
-    await bf.refresh_user_data(user_id)
-    await bf.set_menu_closed_state(user_id, False)
-
-
 async def on_dialog_close(result: Any, manager: DialogManager):
-    await bf.set_menu_closed_state(int(manager.event.from_user.id), True)
+    await bf.set_menu_closed_state(manager.event.from_user.id, True)
     manager.show_mode = ShowMode.EDIT
     await manager.switch_to(SettingsSG.dialog_closed)
     await manager.show()
@@ -288,7 +302,6 @@ dialog = Dialog(
     manage_keywords_window,
     remove_keyword_window,
     dialog_closed_window,
-    getter=data_getter,
-    on_start=on_dialog_start,
+    db_error_window,
     on_close=on_dialog_close,
 )
