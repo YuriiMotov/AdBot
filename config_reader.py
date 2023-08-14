@@ -7,6 +7,8 @@ start_path = os.path.dirname(__file__)
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 
 class Settings(BaseSettings):
+    TEST: int
+    REDIS_DB: int
     BOT_TOKEN: SecretStr
     DB_DNS: str
     API_ID: int

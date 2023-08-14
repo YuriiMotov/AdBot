@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
-from aiogram.types import Message, BotCommand
+from aiogram.types import Message, BotCommand, BotCommandScopeAllPrivateChats
 from aiogram.filters import Command, ExceptionTypeFilter
 from redis.asyncio.client import Redis
 from aiogram_dialog import DialogManager, StartMode, setup_dialogs, ShowMode
@@ -74,7 +74,7 @@ async def on_unknown_state(event, dialog_manager: DialogManager):
 async def set_main_menu(bot: Bot):
     main_menu_commands = [
         BotCommand(
-            command="/start",
+            command="/menu",
             description="Open settings menu"
         ),
         BotCommand(
@@ -83,6 +83,7 @@ async def set_main_menu(bot: Bot):
         )
     ]
     await bot.set_my_commands(main_menu_commands)
+    await bot.set_my_commands(main_menu_commands, scope=BotCommandScopeAllPrivateChats())
 
 
 async def main():
@@ -91,7 +92,6 @@ async def main():
         filename='logs/main.log',
         level=logging.ERROR
     )
-
 
     # Creating DB engine and connections pool
     engine = create_engine(config.DB_DNS, pool_pre_ping=True)
@@ -103,7 +103,7 @@ async def main():
 
     # Create Storage, Bot and Dispatcher objects
     storage = RedisStorage(
-        redis=Redis(host='localhost', port=6379, db=4),
+        redis=Redis(host='localhost', port=6379, db=config.REDIS_DB),
         key_builder=DefaultKeyBuilder(with_destiny=True)
     )
     bot = Bot(token=config.BOT_TOKEN.get_secret_value(), parse_mode='HTML')
@@ -142,10 +142,10 @@ async def main():
 
     # Create and start scheduler
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(bf.process_groupchat_messages, 'interval', seconds=30)
+    scheduler.add_job(bf.process_groupchat_messages, 'interval', seconds=120)
     scheduler.add_job(check_new_messages, 'interval', seconds=CHECK_NEW_MESSAGES_INTERVAL)
-    scheduler.add_job(bf.forward_messages, 'interval', seconds=10)
-    scheduler.add_job(bf.check_opened_dialogs, 'interval', seconds=20)
+    scheduler.add_job(bf.forward_messages, 'interval', seconds=120)
+    scheduler.add_job(bf.check_opened_dialogs, 'interval', seconds=30)
     scheduler.start()
 
     # Start polling

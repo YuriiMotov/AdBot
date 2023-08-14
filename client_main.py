@@ -8,15 +8,13 @@ from config_reader import config
 from functions import userbot_functions as ubf
 
 MAX_DIALOG_HISTORY_MESSAGES_CNT = 500
-CHECK_NEW_MESSAGES_INTERVAL = 30
+CHECK_NEW_MESSAGES_INTERVAL = 300
 
-client = TelegramClient(
-    'telethon.session',
-    config.API_ID,
-    config.API_HASH.get_secret_value(),
-    system_version="4.16.30-vxCUSTOM",
-    retry_delay=3
-)
+client = None
+
+
+async def check_new_messages_stub():
+    print('check_new_messages_stub')
 
 
 async def check_new_messages():
@@ -54,3 +52,14 @@ async def check_new_messages():
 
         # ToDo: check if the total time less than (CHECK_NEW_MESSAGES_INTERVAL / 2)
 
+
+if config.TEST == 1:
+    check_new_messages = check_new_messages_stub
+else:
+    client = TelegramClient(
+        'telethon.session',
+        config.API_ID,
+        config.API_HASH.get_secret_value(),
+        system_version="4.16.30-vxCUSTOM",
+        retry_delay=3
+    )
