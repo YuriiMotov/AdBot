@@ -22,12 +22,12 @@ from aiogram_dialog import Dialog
 from aiogram_dialog.widgets.input import MessageInput
 
 from functions import bot_functions as bf
+from dialogs.common import (
+    data_getter, get_user_data, on_unexpected_input, set_error_msg, on_menu_navigate_click,
+    ERROR_MSG_FORMAT
+)
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-class DBErrorException(Exception):
-    pass
 
 
 # ======================================================================================================
@@ -42,49 +42,24 @@ class SettingsSG(StatesGroup):
 
 
 # ======================================================================================================
-# Common dialog functions
-
-async def get_user_data(manager: DialogManager) -> bf.UserDict:
-    return await bf.get_user(int(manager.event.from_user.id))
-
-
-async def data_getter(dialog_manager: DialogManager, **kwargs):
-    user_data = await get_user_data(dialog_manager)
-    if user_data:
-        return {'user': user_data}
-    else:
-        raise DBErrorException()
-
-
-async def on_unexpected_input(
-    message: Message, dialog: DialogProtocol, manager: DialogManager
-):
-    """
-    Handle unexpacted text input from user. Just delete message.
-    """
-    await message.delete()
-    manager.show_mode = ShowMode.EDIT
-
-
-async def on_menu_navigate_click(
-        callback: CallbackQuery, button: Button, manager: DialogManager
-):
-    await bf.reset_inactivity_timer(manager.event.from_user.id)
-
-
-# ======================================================================================================
 # Settings main window
 
 async def on_forwarding_toggle_click(
         callback: CallbackQuery, button: Button, manager: DialogManager
 ):
+    logger.debug(f'on_forwarding_toggle_click, user={callback.from_user.id}')
+
     user_data = await get_user_data(manager)
-    if user_data is None:
-        logging.error(f'on_forwarding_toggle_click, user data is None')
-        return
-    if (await bf.set_forwarding_state(user_data['id'], not user_data["forwarding"])) == False:
-        logging.error(f'on_forwarding_toggle_click, set_forwarding_state returned False')
-        return
+    if user_data:
+        if (await bf.set_forwarding_state(user_data['id'], not user_data["forwarding"])) == True:
+            return  # Success
+        else:
+            logger.error(f'on_forwarding_toggle_click, set_forwarding_state returned False')
+    else:
+        logger.error(f'on_forwarding_toggle_click, user data is None')
+
+    set_error_msg(manager, 'State hasn`t been changed.')
+
 
 settings_window = Window(
     # Forwarding state
@@ -119,6 +94,11 @@ settings_window = Window(
              "Close the menu to see them.",
        when=F["user"]["msgs_queue_len"] > 0
     ),
+    # Error message
+    Format(
+        ERROR_MSG_FORMAT,
+        when=F['dialog_data']['error_msg']
+    ),
 
     Button(
         text=Case(
@@ -151,9 +131,14 @@ async def on_keyword_add_input(
     message: Message, dialog: DialogProtocol, manager: DialogManager
 ):
     """ """
-    user_id = manager.event.from_user.id
+    user_id = message.from_user.id
+
+    logger.debug(f'on_keyword_add_input, user={user_id}, keyword="{message.text}"')
+
     if not (await bf.add_keyword(user_id, message.text.strip())):
         logger.error(f'on_keyword_add_input {user_id}, add_keyword failed')
+        set_error_msg(manager, 'Keyword wasn`t added.')
+
     await message.delete()
     manager.show_mode = ShowMode.EDIT
 
@@ -181,7 +166,11 @@ manage_keywords_window = Window(
             "<u>To add a keyword write it in the chat</u>",
         when=(F["user"]["keywords"].len() < F["user"]["keywords_limit"])
     ),
-
+    # Error message
+    Format(
+        ERROR_MSG_FORMAT,
+        when=F['dialog_data']['error_msg']
+    ),
     MessageInput(on_keyword_add_input),
     SwitchTo(
         text=Const("Remove keywords"),
@@ -206,10 +195,12 @@ manage_keywords_window = Window(
 async def on_remove_kw_selected(
     callback: CallbackQuery, widget: Any, manager: DialogManager, item_id: str
 ):
-    user_id = manager.event.from_user.id
+    user_id = callback.from_user.id
+    logger.debug(f'on_remove_kw_selected, user={user_id}, keyword={item_id}')
+
     if not await bf.remove_keyword(user_id, item_id):
-        logger.error(f'on_remove_kw_selected {user_id}, remove_keyword failed')
-        callback.answer("Error..", show_alert=True)
+        logger.error(f'on_remove_kw_selected, remove_keyword failed')
+        set_error_msg(manager, 'Keyword wasn`t removed.')
 
 
 remove_keyword_window = Window(
@@ -220,6 +211,11 @@ remove_keyword_window = Window(
     Const(
         "Choose keywords to remove:",
         when=F["user"]["keywords"].len() > 0,
+    ),
+    # Error message
+    Format(
+        ERROR_MSG_FORMAT,
+        when=F['dialog_data']['error_msg']
     ),
     MessageInput(on_unexpected_input),
     Group(
@@ -271,7 +267,7 @@ dialog_closed_window = Window(
     Const(
         "\n" \
         "Settings menu is closed.\n" \
-        "To open it again choose /settings command in the bot menu or type /settings."
+        "To open it again choose /menu command in the bot menu or type /menu."
         ),
     state=SettingsSG.dialog_closed,
     getter=data_getter,
@@ -291,7 +287,14 @@ db_error_window = Window(
 # Dialog object
 
 async def on_dialog_close(result: Any, manager: DialogManager):
-    await bf.set_menu_closed_state(manager.event.from_user.id, True)
+
+    event = manager.event
+    if hasattr(event, "from_user"):
+        logger.debug(f'on_dialog_close, user={event.from_user.id}')
+        await bf.set_menu_closed_state(event.from_user.id, True)
+    else:
+        logger.error(f'on_dialog_close. Event object class {event.__class__} doesn`t have attr "from_user"')
+
     manager.show_mode = ShowMode.EDIT
     await manager.switch_to(SettingsSG.dialog_closed)
     await manager.show()

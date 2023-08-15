@@ -15,8 +15,6 @@ bot: Bot = None
 dp: Dispatcher = None
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
 
 @add_session
 async def get_user(session: Session, user_id: int) -> Optional[UserDict]:

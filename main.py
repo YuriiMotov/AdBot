@@ -18,13 +18,14 @@ from config_reader import config
 from db import models
 from functions import session_decorator
 from functions import bot_functions  as bf
-from dialogs import settings        # Import dialogs
+from dialogs import settings, help        # Import dialogs
+from dialogs.common import DBErrorException
 
 logger = logging.getLogger(__name__)
 
 
 async def start(message: Message, dialog_manager: DialogManager):
-
+    await dialog_close(message, dialog_manager)
     user_id = message.from_user.id
     user_name = message.from_user.username
     user_data = await bf.get_user_add_refresh_reset(user_id, user_name)
@@ -32,11 +33,25 @@ async def start(message: Message, dialog_manager: DialogManager):
         await message.delete()
         await dialog_manager.start(settings.SettingsSG.main, mode=StartMode.RESET_STACK)
     else:
-        logger.error(f'DB error in start command handler')
+        logger.error(f'DB error in `start` command handler')
+        await message.answer("Service unavailable. Please try later.")
+
+
+async def show_help(message: Message, dialog_manager: DialogManager):
+    await dialog_close(message, dialog_manager)
+    user_id = message.from_user.id
+    user_name = message.from_user.username
+    user_data = await bf.get_user_add_refresh_reset(user_id, user_name)
+    if user_data:
+        await message.delete()
+        await dialog_manager.start(help.HelpSG.main, mode=StartMode.RESET_STACK)
+    else:
+        logger.error(f'DB error in `help` command handler')
         await message.answer("Service unavailable. Please try later.")
 
 
 async def dialog_close(message: Message, dialog_manager: DialogManager):
+    dialog_manager.show_mode = ShowMode.EDIT
     try:
         await dialog_manager.done()
     except NoContextError:
@@ -120,8 +135,11 @@ async def main():
     dp.message.register(dialog_close, Command('close_dialog'))
     dp.message.register(dialog_refresh, Command('refresh_dialog'))
 
+    dp.message.register(show_help, Command('help'))
+
+
     # Set error handlers
-    dp.errors.register(on_db_error, ExceptionTypeFilter(settings.DBErrorException))
+    dp.errors.register(on_db_error, ExceptionTypeFilter(DBErrorException))
     dp.errors.register(
         on_unknown_intent,
         ExceptionTypeFilter(UnknownIntent),
@@ -133,6 +151,7 @@ async def main():
 
     # Register dialogs and setup dialogs
     dp.include_router(settings.dialog)
+    dp.include_router(help.dialog)
     setup_dialogs(dp)
 
     # Set sessionmaker and bot for modules

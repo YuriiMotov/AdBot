@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from telethon import TelegramClient
 from telethon.tl.types import Message
@@ -7,6 +8,8 @@ from telethon.tl.custom.dialog import Dialog
 from config_reader import config
 from functions import userbot_functions as ubf
 
+logger = logging.getLogger(__name__)
+
 MAX_DIALOG_HISTORY_MESSAGES_CNT = 500
 CHECK_NEW_MESSAGES_INTERVAL = 300
 
@@ -14,14 +17,12 @@ client = None
 
 
 async def check_new_messages_stub():
-    print('check_new_messages_stub')
+    logger.debug('check_new_messages_stub')
 
 
 async def check_new_messages():
-
+    logger.debug('check_new_messages started')
     async with client:
-
-        # me = await client.get_me()
 
         dialog: Dialog
         message: Message
@@ -29,7 +30,16 @@ async def check_new_messages():
         # Iterate through chats and messages, add messages to DB
         async for dialog in client.iter_dialogs():
             if dialog.is_channel or dialog.is_group:
+                if hasattr(dialog, "name"):
+                    logger.debug(f"check_new_messages parse chat '{dialog.name}'. Unreaded: {dialog.unread_count}")
+                else:
+                    logger.debug(f"check_new_messages parse chat '??' (doesn't have `name` attr)")
+
                 unread_cnt = min(dialog.unread_count, MAX_DIALOG_HISTORY_MESSAGES_CNT)
+                if dialog.unread_count > unread_cnt:
+                    skipped = (dialog.unread_count - unread_cnt)
+                    logger.warning(f'check_new_messages skipped {skipped} msgs')
+
 
                 max_msg_id = 0
                 my_chat = await client.get_entity(dialog)
@@ -51,10 +61,12 @@ async def check_new_messages():
                     await client.send_read_acknowledge(my_chat, max_id=max_msg_id)
 
         # ToDo: check if the total time less than (CHECK_NEW_MESSAGES_INTERVAL / 2)
+    logger.debug('check_new_messages finished')
 
 
 if config.TEST == 1:
     check_new_messages = check_new_messages_stub
+    logger.debug('TEST == 1')
 else:
     client = TelegramClient(
         'telethon.session',
@@ -63,3 +75,5 @@ else:
         system_version="4.16.30-vxCUSTOM",
         retry_delay=3
     )
+    logger.debug('Telethon client object created')
+
