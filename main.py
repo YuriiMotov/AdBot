@@ -20,11 +20,17 @@ from functions import session_decorator
 from functions import bot_functions  as bf
 from dialogs import settings, help        # Import dialogs
 from dialogs.common import DBErrorException
+from debug import debug_enable
+
+logging.basicConfig(filename='logs/main.log', level=logging.ERROR)
+if config.TEST == 1:
+    debug_enable('functions.bot_functions')
 
 logger = logging.getLogger(__name__)
 
 
 async def start(message: Message, dialog_manager: DialogManager):
+    logger.debug(f'`start` command, user={message.from_user.id}')
     await dialog_close(message, dialog_manager)
     user_id = message.from_user.id
     user_name = message.from_user.username
@@ -38,6 +44,7 @@ async def start(message: Message, dialog_manager: DialogManager):
 
 
 async def show_help(message: Message, dialog_manager: DialogManager):
+    logger.debug(f'`help` command, user={message.from_user.id}')
     await dialog_close(message, dialog_manager)
     user_id = message.from_user.id
     user_name = message.from_user.username
@@ -51,6 +58,7 @@ async def show_help(message: Message, dialog_manager: DialogManager):
 
 
 async def dialog_close(message: Message, dialog_manager: DialogManager):
+    logger.debug(f'`close_dialog` command, user={message.from_user.id}')
     dialog_manager.show_mode = ShowMode.EDIT
     try:
         await dialog_manager.done()
@@ -59,28 +67,30 @@ async def dialog_close(message: Message, dialog_manager: DialogManager):
 
 
 async def dialog_refresh(message: Message, dialog_manager: DialogManager):
+    logger.debug(f'`refresh_dialog` command, user={message.from_user.id}')
     try:
         dialog_manager.show_mode = ShowMode.EDIT
         await dialog_manager.show()
     except NoContextError:
-        pass
+        logger.warning(f'`refresh_dialog` command, user={message.from_user.id}, Exception (NoContextError)')
 
 
 async def on_db_error(event, dialog_manager: DialogManager):
-    logging.error("DB error exception: %s. Switch to error message window", event.exception)
+    logging.error(f"DB error exception: {event.exception}. Switch to error message window")
     await dialog_manager.start(
         settings.SettingsSG.db_error, mode=StartMode.RESET_STACK, show_mode=ShowMode.EDIT,
     )
 
+
 async def on_unknown_intent(event, dialog_manager: DialogManager):
-    logging.error("Restarting dialog: %s", event.exception)
+    logging.error(f"on_unknown_intent. Restarting dialog: {event.exception}")
     await dialog_manager.start(
         settings.SettingsSG.main, mode=StartMode.RESET_STACK, show_mode=ShowMode.EDIT,
     )
 
 
 async def on_unknown_state(event, dialog_manager: DialogManager):
-    logging.error("Restarting dialog: %s", event.exception)
+    logging.error(f"on_unknown_state. Restarting dialog: {event.exception}")
     await dialog_manager.start(
         settings.SettingsSG.main, mode=StartMode.RESET_STACK, show_mode=ShowMode.EDIT,
     )
@@ -103,17 +113,12 @@ async def set_main_menu(bot: Bot):
 
 async def main():
 
-    logging.basicConfig(
-        filename='logs/main.log',
-        level=logging.ERROR
-    )
-
     # Creating DB engine and connections pool
     engine = create_engine(config.DB_DNS, pool_pre_ping=True)
     db_pool = sessionmaker(bind=engine)
 
     # Change the flag to True to create DB
-    if True:
+    if False:
         models.Base.metadata.create_all(engine)
 
     # Create Storage, Bot and Dispatcher objects
@@ -168,6 +173,7 @@ async def main():
     scheduler.start()
 
     # Start polling
+    logger.debug(f'Start polling')
     await dp.start_polling(bot)
 
 

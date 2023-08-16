@@ -287,7 +287,6 @@ db_error_window = Window(
 # Dialog object
 
 async def on_dialog_close(result: Any, manager: DialogManager):
-
     event = manager.event
     if hasattr(event, "from_user"):
         logger.debug(f'on_dialog_close, user={event.from_user.id}')

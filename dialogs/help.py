@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from aiogram.filters.state import StatesGroup, State
@@ -17,6 +18,7 @@ from dialogs.common import (
     data_getter, on_unexpected_input
 )
 
+logger = logging.getLogger(__name__)
 
 # ======================================================================================================
 # Settings dialog's states
@@ -132,8 +134,17 @@ dialog_closed_window = Window(
 # Dialog object
 
 async def on_dialog_close(result: Any, manager: DialogManager):
-    await bf.set_menu_closed_state(manager.event.from_user.id, True)
+
     event = manager.event
+
+    if hasattr(event, "from_user"):
+        logger.debug(f'on_dialog_close, user={event.from_user.id}')
+        await bf.set_menu_closed_state(event.from_user.id, True)
+    else:
+        logger.error(f'on_dialog_close. Event object class {event.__class__} doesn`t have attr "from_user"')
+
+    await bf.set_menu_closed_state(manager.event.from_user.id, True)
+
     if isinstance(event, CallbackQuery):
         await event.message.delete()
     elif isinstance(event, Message):

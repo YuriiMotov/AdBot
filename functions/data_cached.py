@@ -282,17 +282,6 @@ class DataCached():
         else:
             return None     # DB error
 
-    # It isn't used. Remove?
-    #
-    # async def get_active_users(self, session: Session) -> None:
-    #     if self._users_cache is None:
-    #         self._load_active_users_data(session)
-    #     time_point = (datetime.now() - timedelta(minutes=2)).timestamp()
-    #     return [
-    #         user['id'] for user in self._users_cache.values() \
-    #             if ((not user['menu_closed']) and (user['last_activity_dt'] >= time_point))
-    #     ]
-
 
     async def process_groupchat_messages(self, session: Session) -> bool:
         """

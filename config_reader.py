@@ -4,7 +4,7 @@ from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
 start_path = os.path.dirname(__file__)
-dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
+dotenv_path = os.path.join(start_path, '.env')
 
 class Settings(BaseSettings):
     TEST: int
