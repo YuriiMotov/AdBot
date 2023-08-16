@@ -24,9 +24,18 @@ from debug import debug_enable
 
 logging.basicConfig(filename='logs/main.log', level=logging.ERROR)
 if config.TEST == 1:
-    debug_enable('functions.bot_functions')
+    debug_enable()
 
 logger = logging.getLogger(__name__)
+scheduler = AsyncIOScheduler()
+dp: Dispatcher = None
+
+async def stop_bot(message: Message, dialog_manager: DialogManager):
+    user_id = message.from_user.id
+    logger.debug(f'`stop_bot` command, user={user_id}')
+    if config.ADMIN_ID == user_id:
+        scheduler.shutdown()
+        await dp.stop_polling()
 
 
 async def start(message: Message, dialog_manager: DialogManager):
@@ -113,6 +122,8 @@ async def set_main_menu(bot: Bot):
 
 async def main():
 
+    global dp
+
     # Creating DB engine and connections pool
     engine = create_engine(config.DB_DNS, pool_pre_ping=True)
     db_pool = sessionmaker(bind=engine)
@@ -139,9 +150,8 @@ async def main():
     dp.message.register(start, Command('start', 'settings', 'menu'))
     dp.message.register(dialog_close, Command('close_dialog'))
     dp.message.register(dialog_refresh, Command('refresh_dialog'))
-
     dp.message.register(show_help, Command('help'))
-
+    dp.message.register(stop_bot, Command('stop_bot'))
 
     # Set error handlers
     dp.errors.register(on_db_error, ExceptionTypeFilter(DBErrorException))
@@ -165,7 +175,6 @@ async def main():
     bf.dp = dp
 
     # Create and start scheduler
-    scheduler = AsyncIOScheduler()
     scheduler.add_job(bf.process_groupchat_messages, 'interval', seconds=120)
     scheduler.add_job(check_new_messages, 'interval', seconds=CHECK_NEW_MESSAGES_INTERVAL)
     scheduler.add_job(bf.forward_messages, 'interval', seconds=120)

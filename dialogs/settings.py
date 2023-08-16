@@ -29,7 +29,6 @@ from dialogs.common import (
 
 logger = logging.getLogger(__name__)
 
-
 # ======================================================================================================
 # Settings dialog's states
 
