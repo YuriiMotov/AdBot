@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, query_expression
 
 
 class Base(DeclarativeBase):
-    pass 
+    pass
 
 
 # Table for storying links of 'many to many' relationship between User and Keyword
@@ -33,8 +33,10 @@ user_message_link = Table(
 class User(Base):
     __tablename__ = "user_account"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)  # Telegram user ID
-    telegram_name: Mapped[str] = mapped_column(Unicode(32), default=None)
+    id: Mapped[int] = mapped_column(primary_key=True)  # Telegram user ID
+    telegram_id: Mapped[int] = mapped_column(nullable=True)
+    telegram_name: Mapped[str] = mapped_column(Unicode(32), nullable=True, default=None)
+    subscription_state: Mapped[bool] = mapped_column(Boolean, default=False)
     forwarding: Mapped[bool] = mapped_column(Boolean, default=False)
     menu_closed: Mapped[bool] = mapped_column(Boolean, default=True)
     forward_queue_len: Mapped[int] = query_expression()
@@ -71,6 +73,8 @@ class GroupChatMessage(Base):
     __tablename__ = "chat_message"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    source_id: Mapped[int] = mapped_column()
+    cat_id: Mapped[int] = mapped_column()
     processed: Mapped[bool] = mapped_column(Boolean, default=False)
     text: Mapped[str] = mapped_column(UnicodeText)
     url: Mapped[str] = mapped_column(String(120))
