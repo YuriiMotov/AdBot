@@ -47,12 +47,15 @@ async def check_new_messages():
                 async for message in client.iter_messages(dialog, unread_cnt):
                     if hasattr(message, 'from_id') and message.from_id:
                         sender = await client.get_entity(message.from_id)
-                        if message.message and not sender.bot:
-                            if hasattr(my_chat, 'username') and my_chat.username:
-                                link = f'https://t.me/{my_chat.username}/{message.id}'
-                            else:
-                                link = f'https://t.me/c/{my_chat.id}/{message.id}'
-                            await ubf.add_groupchat_msg(message.message, link)
+                        if message.message and hasattr(sender, 'bot') and not sender.bot:
+                            try:
+                                if hasattr(my_chat, 'username') and my_chat.username:
+                                    link = f'https://t.me/{my_chat.username}/{message.id}'
+                                else:
+                                    link = f'https://t.me/c/{my_chat.id}/{message.id}'
+                                await ubf.add_groupchat_msg(message.message, link)
+                            except Exception as e:
+                                print(f'Error in client: {e} during processing `{message.message[:150]}`')
 
                             max_msg_id = max(max_msg_id, message.id)
                         await asyncio.sleep(0.1)

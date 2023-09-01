@@ -327,7 +327,7 @@ class DataCached():
             st = select(m.User).where(m.User.forwarding == True).options(selectinload(m.User.forward_queue))
             users = session.scalars(st).all()
             for user in users:
-                for msg in user.forward_queue:
+                for msg in list(user.forward_queue):
                     if (await self.get_menu_closed_state(session, user.id)) == True:
                         if await forward_func(user.id, msg.url):
                             user.forward_queue.remove(msg)
