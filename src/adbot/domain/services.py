@@ -1,19 +1,24 @@
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from hashlib import md5
 import logging
-from typing import Any, Optional, TypeAlias, Union
+from typing import Optional, TypeAlias, Union
 
 from sqlalchemy.orm import Session, sessionmaker, load_only, with_expression, selectinload
-from sqlalchemy import select, delete, func
+from sqlalchemy import select, func
 from sqlalchemy.exc import SQLAlchemyError
 
-from adbot.domain import models
+from .messagebus import MessageBus
+from . import events
+from . import models
 from . import exceptions as exc
 
 
 UserDict: TypeAlias = dict[str, Union[bool, str, int, float, list[int | str]]]
 ForwardFunc: TypeAlias = Callable[[int, str], Awaitable[bool]]
+
+IDLE_TIMEOUT_MINUTES = 2
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -23,7 +28,19 @@ class AdBotServices():
 
     def __init__(self, db_pool: sessionmaker):
         self._db_pool = db_pool
-        # TODO: preload data?
+        self.messagebus = MessageBus()
+
+        # Set last_activity_dt for all users with menu_closed=False
+        self._last_activity_dt = {}
+        st = select(models.User.id).where(models.User.menu_closed == False)
+        try:
+            with self._db_pool() as session:
+                for user_id in session.scalars(st).all():
+                    self._last_activity_dt[user_id] = datetime.now()
+        except SQLAlchemyError as e:
+            self._db_error_handle(e)
+            raise exc.AdBotExceptionSQL("SQLAlchemyError")
+
 
     def _db_error_handle(self, error: SQLAlchemyError) -> None:
         logger.error(f'Exception {error.__class__} {error}')
@@ -47,7 +64,7 @@ class AdBotServices():
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
 
 
-    def get_user_by_id(self, user_id: int) -> models.User:
+    async def get_user_by_id(self, user_id: int) -> models.User:
         try:
             with self._db_pool() as session:
                 return self._get_user_by_id(session, user_id)
@@ -56,7 +73,7 @@ class AdBotServices():
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
         
 
-    def get_user_by_telegram_id(self, telegram_id: int) -> Optional[models.User]:
+    async def get_user_by_telegram_id(self, telegram_id: int) -> Optional[models.User]:
         try:
             with self._db_pool() as session:
                 st = select(models.User) \
@@ -75,7 +92,7 @@ class AdBotServices():
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
 
 
-    def create_user_by_telegram_data(self, telegram_id: int, telegram_name: str) -> models.User:
+    async def create_user_by_telegram_data(self, telegram_id: int, telegram_name: str) -> models.User:
         try:
             with self._db_pool() as session:
                 user = models.User()
@@ -88,7 +105,7 @@ class AdBotServices():
             self._db_error_handle(e)
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
         
-        user = self.get_user_by_telegram_id(telegram_id)
+        user = await self.get_user_by_telegram_id(telegram_id)
         if user:
             return user
         else:
@@ -98,7 +115,7 @@ class AdBotServices():
 
     # Subscription management
 
-    def set_subscription_state(self, user_id: int, new_state: bool) -> bool:
+    async def set_subscription_state(self, user_id: int, new_state: bool) -> bool:
         try:
             with self._db_pool() as session:
                 user = self._get_user_by_id(session, user_id)
@@ -110,10 +127,25 @@ class AdBotServices():
             self._db_error_handle(e)
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
 
+    # Forwarding state management
+
+    async def set_forwarding_state(self, user_id: int, new_state: bool) -> bool:
+        try:
+            with self._db_pool() as session:
+                user = self._get_user_by_id(session, user_id)
+                if user is None:
+                    raise exc.AdBotExceptionUserNotExist(f"User {user_id} doesn`t exist")
+                user.forwarding_state = new_state
+                session.commit()
+        except SQLAlchemyError as e:
+            self._db_error_handle(e)
+            raise exc.AdBotExceptionSQL("SQLAlchemyError")
+
+
 
     # Menu closed state management
 
-    def set_menu_closed_state(self, user_id: int, new_state: bool) -> bool:
+    async def set_menu_closed_state(self, user_id: int, new_state: bool) -> bool:
         try:
             with self._db_pool() as session:
                 user = self._get_user_by_id(session, user_id)
@@ -126,10 +158,23 @@ class AdBotServices():
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
 
 
+    # Idle timeout managment
+
+    async def reset_idle_timeout(self, user_id) -> None:
+        self._last_activity_dt[user_id] = datetime.now()
+
+
+    async def get_is_idle(self, user_id: int) -> bool:
+        time_point = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
+
+        if user_id in self._last_activity_dt.keys():
+            return self._last_activity_dt[user_id] < time_point
+        return True
+
 
     # Keywords management
 
-    def add_keyword(self, user_id: int, keyword: str) -> bool:
+    async def add_keyword(self, user_id: int, keyword: str) -> bool:
         try:
             with self._db_pool() as session:
                 user = self._get_user_by_id(session, user_id)
@@ -149,7 +194,7 @@ class AdBotServices():
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
 
 
-    def remove_keyword(self, user_id: int, keyword: str) -> bool:
+    async def remove_keyword(self, user_id: int, keyword: str) -> bool:
         try:
             with self._db_pool() as session:
                 user = self._get_user_by_id(session, user_id)
@@ -168,7 +213,7 @@ class AdBotServices():
 
     # Messages management
 
-    def add_message(self, cat_id: int, source_id: int, msg_text: str, url: str) -> bool:
+    async def add_message(self, cat_id: int, source_id: int, msg_text: str, url: str) -> bool:
         try:
             with self._db_pool() as session:
                 msg = models.GroupChatMessage(
@@ -186,10 +231,10 @@ class AdBotServices():
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
 
 
-    def process_messages(self) -> None:
+    async def _process_messages(self) -> None:
         try:
             with self._db_pool() as session:
-                keywords = self._get_all_keywords(session)
+                keywords = await self._get_all_keywords(session)
                 st = select(models.GroupChatMessage).where(models.GroupChatMessage.processed == False)
                 msgs = session.scalars(st).all()
                 for msg in msgs:
@@ -206,7 +251,7 @@ class AdBotServices():
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
 
 
-    def _get_all_keywords(self, session: Session) -> Optional[dict]:
+    async def _get_all_keywords(self, session: Session) -> Optional[dict]:
         """
             Return list of all keywords of users with enabled `forwarding`.
             If `_keywords_update_required` is True - request data from DB, 
@@ -225,9 +270,46 @@ class AdBotServices():
                     .options(
                         selectinload(models.Keyword.users).options(load_only(models.User.id))
                     )
-            
+
             for kw in session.scalars(st).all():
                 self._keywords_cache[kw.word] = [user.id for user in kw.users if user.subscription_state]
 
         return self._keywords_cache     # Success
+
+
+    async def _forward_messages(self) -> None:
+        try:
+            with self._db_pool() as session:
+                st = select(models.User) \
+                    .where(models.User.forwarding_state == True) \
+                    .options(selectinload(models.User.forward_queue))
+                users = session.scalars(st).all()
+                for user in users:
+                    for msg in list(user.forward_queue):
+                        if user.menu_closed == True:
+                            event = events.AdBotMessageForwardRequest(
+                                user_id=user.id,
+                                telegram_id=user.telegram_id,
+                                message_url=msg.url,
+                                message_text=msg.text
+                            )
+                            self.messagebus.post_event(event)
+                            user.forward_queue.remove(msg)
+                session.commit()
+        except SQLAlchemyError as e:
+            self._db_error_handle(e)
+            raise exc.AdBotExceptionSQL("SQLAlchemyError")
+
+
+    async def _check_idle_timeouts(self) -> None:
+        pass
+
+
+    async def run(self) -> None:
+        while not self._stop:
+            await self._process_messages()
+            await self._forward_messages()
+            await self._check_idle_timeouts()
+            await asyncio.sleep(5)
+
 

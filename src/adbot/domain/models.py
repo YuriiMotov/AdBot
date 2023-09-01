@@ -36,9 +36,9 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)  # Telegram user ID
     telegram_id: Mapped[int] = mapped_column(nullable=True)
     telegram_name: Mapped[str] = mapped_column(Unicode(32), nullable=True, default=None)
-    subscription_state: Mapped[bool] = mapped_column(Boolean, default=False)
-    forwarding: Mapped[bool] = mapped_column(Boolean, default=False)
-    menu_closed: Mapped[bool] = mapped_column(Boolean, default=True)
+    subscription_state: Mapped[bool] = mapped_column(Boolean, nullable=True, default=False)
+    forwarding_state: Mapped[bool] = mapped_column(Boolean, nullable=True, default=False)
+    menu_closed: Mapped[bool] = mapped_column(Boolean, nullable=True, default=True)
     forward_queue_len: Mapped[int] = query_expression()
 
     forward_queue: Mapped[List["GroupChatMessage"]] = relationship(
