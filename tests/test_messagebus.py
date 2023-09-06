@@ -71,6 +71,16 @@ def test_mb_raises_exception_on_duplicated_handler():
         bus.subscribe([events.AdBotCriticalError], fake_subscriber_func)
 
 
+def test_mb_raises_exception_on_wrong_event_type():
+    class SomeClass:
+        pass
+
+    bus = mb.MessageBus()
+    
+    with pytest.raises(mb.MessageBusException):
+        bus.subscribe([SomeClass], fake_subscriber_func)
+
+
 @pytest.mark.asyncio
 async def test_post_events_function():
     catched_events = []
@@ -138,7 +148,7 @@ async def test_post_events_several_subscribers_several_events():
 
 
 @pytest.mark.asyncio
-async def test_post_events_several_subscribers_with_foult_in_one_handler():
+async def test_post_events_several_subscribers_with_fault_in_one_handler():
     bus = mb.MessageBus()
 
     catched_events = []
