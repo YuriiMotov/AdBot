@@ -271,8 +271,6 @@ async def test_set_forwarding_state_raises_exception_on_sql_error(in_memory_adbo
         await adbot_srv.set_forwarding_state(user.id, True)
 
 
-
-
 # ==============================================================================================
 # user menu closed state management
 
@@ -338,25 +336,25 @@ async def test_onload_set_last_activity_dt_for_users_with_opened_menu(in_memory_
 
     user_ids = [2, 4]
     user_ids_set = set(user_ids)
-    assert len(adbot_srv._last_activity_dt) == 2
-    last_activity_dt_uids = list(adbot_srv._last_activity_dt.keys())
+    assert len(adbot_srv._menu_activity_cache) == 2
+    last_activity_dt_uids = list(adbot_srv._menu_activity_cache.keys())
     assert last_activity_dt_uids[0] in user_ids_set
     user_ids_set.remove(last_activity_dt_uids[0])
     assert last_activity_dt_uids[1] in user_ids_set
     user_ids_set.remove(last_activity_dt_uids[1])
 
     left_dt = datetime.now() - timedelta(seconds=1)
-    assert left_dt <= adbot_srv._last_activity_dt[user_ids[0]] <= datetime.now()
-    assert left_dt <= adbot_srv._last_activity_dt[user_ids[1]] <= datetime.now()
+    assert left_dt <= adbot_srv._menu_activity_cache[user_ids[0]]['act_dt'] <= datetime.now()
+    assert left_dt <= adbot_srv._menu_activity_cache[user_ids[1]]['act_dt'] <= datetime.now()
 
 
 @pytest.mark.asyncio
-async def test_get_is_idle_default_true(in_memory_db_sessionmaker):
+async def test_get_is_idle_default_false(in_memory_db_sessionmaker):
     with in_memory_db_sessionmaker() as session:
         session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 1)'))
         session.commit()
     adbot_srv = AdBotServices(in_memory_db_sessionmaker)
-    assert (await adbot_srv.get_is_idle(1)) == True
+    assert (await adbot_srv.get_is_idle_with_opened_menu(1)) == False
 
 
 @pytest.mark.asyncio
@@ -365,7 +363,7 @@ async def test_get_is_idle_onload_on_user_with_opened_menu_returns_false(in_memo
         session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
         session.commit()
     adbot_srv = AdBotServices(in_memory_db_sessionmaker)
-    assert (await adbot_srv.get_is_idle(1)) == False
+    assert (await adbot_srv.get_is_idle_with_opened_menu(1)) == False
 
 
 @pytest.mark.asyncio
@@ -376,8 +374,8 @@ async def test_get_is_idle_on_user_with_timeout_more_when_limit_returns_true(in_
     adbot_srv = AdBotServices(in_memory_db_sessionmaker)
 
     idle_point = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
-    adbot_srv._last_activity_dt[1] = idle_point
-    assert (await adbot_srv.get_is_idle(1)) == True
+    adbot_srv._menu_activity_cache[1]['act_dt'] = idle_point
+    assert (await adbot_srv.get_is_idle_with_opened_menu(1)) == True
 
 
 @pytest.mark.asyncio
@@ -388,8 +386,8 @@ async def test_get_is_idle_on_user_with_timeout_less_when_limit_returns_false(in
     adbot_srv = AdBotServices(in_memory_db_sessionmaker)
 
     idle_point = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
-    adbot_srv._last_activity_dt[1] = idle_point + timedelta(seconds=1)
-    assert (await adbot_srv.get_is_idle(1)) == False
+    adbot_srv._menu_activity_cache[1]['act_dt'] = idle_point + timedelta(seconds=1)
+    assert (await adbot_srv.get_is_idle_with_opened_menu(1)) == False
 
 
 @pytest.mark.asyncio
@@ -400,11 +398,23 @@ async def test_get_reset_idle_timeout(in_memory_db_sessionmaker):
     adbot_srv = AdBotServices(in_memory_db_sessionmaker)
 
     idle_point = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
-    adbot_srv._last_activity_dt[1] = idle_point
-    assert (await adbot_srv.get_is_idle(1)) == True
+    adbot_srv._menu_activity_cache[1]['act_dt'] = idle_point
+    assert (await adbot_srv.get_is_idle_with_opened_menu(1)) == True
     
     await adbot_srv.reset_idle_timeout(1)
-    assert (await adbot_srv.get_is_idle(1)) == False
+    assert (await adbot_srv.get_is_idle_with_opened_menu(1)) == False
+
+
+@pytest.mark.asyncio
+async def test_get_is_idle_on_user_with_timeout_more_when_limit_and_closed_menu_returns_false(in_memory_db_sessionmaker):
+    with in_memory_db_sessionmaker() as session:
+        session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
+        session.commit()
+    adbot_srv = AdBotServices(in_memory_db_sessionmaker)
+    idle_point = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
+    adbot_srv._menu_activity_cache[1]['act_dt'] = idle_point
+    await adbot_srv.set_menu_closed_state(1, True)
+    assert (await adbot_srv.get_is_idle_with_opened_menu(1)) == False
 
 
 # ==============================================================================================
@@ -834,3 +844,269 @@ async def test_forward_messages_two_users(in_memory_adbot_srv: AdBotServices):
     assert catched_events[3].user_id in messages_to_users[catched_events[3].message_text]
     messages_to_users[catched_events[3].message_text].remove(catched_events[3].user_id)
 
+
+# ==============================================================================================
+# Inactivity timeout events
+
+@pytest.mark.asyncio
+async def test_inactivity_timeouts_none_when_menu_closed(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    catched_events = []
+    async def fake_subscriber_func_local(event: mb.AdBotEvent):
+        catched_events.append(event)
+
+    adbot_srv.messagebus.subscribe([events.AdBotInactivityTimeout], fake_subscriber_func_local)
+
+    user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
+    adbot_srv._menu_activity_cache[user.id] = {
+        'menu_closed': True,
+        'act_dt': datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES*2)
+    }
+    await adbot_srv._check_idle_timeouts()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    assert len(catched_events) == 0
+    
+
+@pytest.mark.asyncio
+async def test_inactivity_timeouts_none_when_user_active(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    catched_events = []
+    async def fake_subscriber_func_local(event: mb.AdBotEvent):
+        catched_events.append(event)
+
+    adbot_srv.messagebus.subscribe([events.AdBotInactivityTimeout], fake_subscriber_func_local)
+
+    user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
+    await adbot_srv.set_menu_closed_state(user.id, False)
+    await adbot_srv.reset_idle_timeout(user.id)
+    await adbot_srv._check_idle_timeouts()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    assert len(catched_events) == 0
+    
+
+@pytest.mark.asyncio
+async def test_inactivity_timeouts_none_when_user_active_2(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    catched_events = []
+    async def fake_subscriber_func_local(event: mb.AdBotEvent):
+        catched_events.append(event)
+
+    adbot_srv.messagebus.subscribe([events.AdBotInactivityTimeout], fake_subscriber_func_local)
+
+    user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
+    await adbot_srv.set_menu_closed_state(user.id, False)
+    adbot_srv._menu_activity_cache[user.id]['act_dt'] = datetime.now() - timedelta(seconds=IDLE_TIMEOUT_MINUTES*60 - 1)
+
+    await adbot_srv._check_idle_timeouts()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    assert len(catched_events) == 0
+    
+
+
+@pytest.mark.asyncio
+async def test_inactivity_timeouts_event_when_user_inactive_and_menu_open(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    catched_events = []
+    async def fake_subscriber_func_local(event: mb.AdBotEvent):
+        catched_events.append(event)
+
+    adbot_srv.messagebus.subscribe([events.AdBotInactivityTimeout], fake_subscriber_func_local)
+
+    user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
+    await adbot_srv.set_menu_closed_state(user.id, False)
+    adbot_srv._menu_activity_cache[user.id]['act_dt'] = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES*2)
+    await adbot_srv._check_idle_timeouts()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    assert len(catched_events) == 1
+
+
+@pytest.mark.asyncio
+async def test_inactivity_timeouts_several_users(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    catched_events = []
+    async def fake_subscriber_func_local(event: mb.AdBotEvent):
+        catched_events.append(event)
+
+    adbot_srv.messagebus.subscribe([events.AdBotInactivityTimeout], fake_subscriber_func_local)
+
+    # User1 - menu is open and user is inactive
+    user1 = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
+    await adbot_srv.set_menu_closed_state(user1.id, False)
+    adbot_srv._menu_activity_cache[user1.id]['act_dt'] = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
+
+    # User2 - menu is open and user is active
+    user2 = await adbot_srv.create_user_by_telegram_data(222222, 'dsa')
+    await adbot_srv.set_menu_closed_state(user2.id, False)
+
+    # User3 - menu is open and user is inactive
+    user3 = await adbot_srv.create_user_by_telegram_data(333333, 'sda')
+    await adbot_srv.set_menu_closed_state(user3.id, False)
+    adbot_srv._menu_activity_cache[user3.id]['act_dt'] = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES*2)
+
+    await adbot_srv._check_idle_timeouts()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    assert len(catched_events) == 2     # InactivityTimeout events for User1 and User3
+    uids = [user1.id, user3.id]
+    assert catched_events[0].user_id in uids
+    uids.remove(catched_events[0].user_id)
+    assert catched_events[1].user_id in uids
+    uids.remove(catched_events[1].user_id)
+
+
+# ==============================================================================================
+# `User data updated` events
+
+@pytest.mark.asyncio
+async def test_check_user_data_updated_generate_event(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    catched_events = []
+    async def fake_subscriber_func_local(event: mb.AdBotEvent):
+        catched_events.append(event)
+
+    adbot_srv.messagebus.subscribe([events.AdBotUserDataUpdated], fake_subscriber_func_local)
+
+    user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
+    await adbot_srv.set_subscription_state(user.id, True)
+    await adbot_srv.set_forwarding_state(user.id, True)
+    await adbot_srv.set_menu_closed_state(user.id, False)
+    await adbot_srv.add_keyword(user.id, 'apple')
+    await adbot_srv.add_message(1, 1, 'apple and banana', 'http://t.me/c/11/11')
+    await adbot_srv._process_messages()
+    await adbot_srv._forward_messages()
+    await adbot_srv._check_user_data_updated()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    assert len(catched_events) == 1
+    assert catched_events[0].user_id == user.id
+
+
+@pytest.mark.asyncio
+async def test_check_user_data_updated_doesnt_generate_event_if_menu_closed(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    catched_events = []
+    async def fake_subscriber_func_local(event: mb.AdBotEvent):
+        catched_events.append(event)
+
+    adbot_srv.messagebus.subscribe([events.AdBotUserDataUpdated], fake_subscriber_func_local)
+
+    user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
+    await adbot_srv.set_subscription_state(user.id, True)
+    await adbot_srv.set_forwarding_state(user.id, True)
+    await adbot_srv.add_keyword(user.id, 'apple')
+    await adbot_srv.add_message(1, 1, 'apple and banana', 'http://t.me/c/11/11')
+    await adbot_srv._process_messages()
+    await adbot_srv._forward_messages()
+    await adbot_srv._check_user_data_updated()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    assert len(catched_events) == 0
+
+
+@pytest.mark.asyncio
+async def test_check_user_data_updated_doesnt_duplicate_event(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    catched_events = []
+    async def fake_subscriber_func_local(event: mb.AdBotEvent):
+        catched_events.append(event)
+
+    adbot_srv.messagebus.subscribe([events.AdBotUserDataUpdated], fake_subscriber_func_local)
+
+    user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
+    await adbot_srv.set_subscription_state(user.id, True)
+    await adbot_srv.set_forwarding_state(user.id, True)
+    await adbot_srv.set_menu_closed_state(user.id, False)
+    await adbot_srv.add_keyword(user.id, 'apple')
+    await adbot_srv.add_message(1, 1, 'apple and banana', 'http://t.me/c/11/11')
+    await adbot_srv._process_messages()
+    await adbot_srv._check_user_data_updated()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+    await adbot_srv._process_messages()
+    await adbot_srv._check_user_data_updated()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    assert len(catched_events) == 1
+    assert catched_events[0].user_id == user.id
+
+
+@pytest.mark.asyncio
+async def test_check_user_data_updated_generate_second_event(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    catched_events = []
+    async def fake_subscriber_func_local(event: mb.AdBotEvent):
+        catched_events.append(event)
+
+    adbot_srv.messagebus.subscribe([events.AdBotUserDataUpdated], fake_subscriber_func_local)
+
+    user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
+    await adbot_srv.set_subscription_state(user.id, True)
+    await adbot_srv.set_forwarding_state(user.id, True)
+    await adbot_srv.set_menu_closed_state(user.id, False)
+    await adbot_srv.add_keyword(user.id, 'apple')
+    await adbot_srv.add_message(1, 1, 'apple and banana', 'http://t.me/c/11/11')
+    await adbot_srv._process_messages()
+    await adbot_srv._check_user_data_updated()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    await adbot_srv.add_message(2, 2, 'one more apple', 'http://t.me/c/22/22')
+    await adbot_srv._process_messages()
+    await adbot_srv._check_user_data_updated()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    assert len(catched_events) == 2
+    assert catched_events[0].user_id == user.id
+    assert catched_events[1].user_id == user.id
+
+
+@pytest.mark.asyncio
+async def test_check_user_data_updated_generate_events_several_users(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    catched_events = []
+    async def fake_subscriber_func_local(event: mb.AdBotEvent):
+        catched_events.append(event)
+
+    adbot_srv.messagebus.subscribe([events.AdBotUserDataUpdated], fake_subscriber_func_local)
+
+    user1 = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
+    await adbot_srv.set_subscription_state(user1.id, True)
+    await adbot_srv.set_forwarding_state(user1.id, True)
+    await adbot_srv.set_menu_closed_state(user1.id, False)
+    await adbot_srv.add_keyword(user1.id, 'apple')
+
+    user2 = await adbot_srv.create_user_by_telegram_data(222222, 'dsa')
+    await adbot_srv.set_subscription_state(user2.id, True)
+    await adbot_srv.set_forwarding_state(user2.id, True)
+    await adbot_srv.set_menu_closed_state(user2.id, False)
+    await adbot_srv.add_keyword(user2.id, 'banana')
+
+    user3 = await adbot_srv.create_user_by_telegram_data(333333, 'sda')
+    await adbot_srv.set_subscription_state(user3.id, True)
+    await adbot_srv.set_forwarding_state(user3.id, True)
+    await adbot_srv.set_menu_closed_state(user3.id, False)
+    await adbot_srv.add_keyword(user3.id, 'orange')
+
+    await adbot_srv.add_message(1, 1, 'apple and banana', 'http://t.me/c/11/11')
+    await adbot_srv._process_messages()
+    await adbot_srv._check_user_data_updated()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    assert len(catched_events) == 2     # UserDataUpdated events for user1 and user2
+    uids = [user1.id, user2.id]
+    assert catched_events[0].user_id in uids
+    uids.remove(catched_events[0].user_id)
+    assert catched_events[1].user_id in uids
+    uids.remove(catched_events[1].user_id)
