@@ -5,7 +5,7 @@ from telethon import TelegramClient
 from telethon.tl.types import Message, Entity
 from telethon.tl.custom.dialog import Dialog
 
-from ..protocol import MessageFetcher, AddMessageHandler
+from ..interface import MessageFetcher, AddMessageHandler
 
 MAX_DIALOG_HISTORY_MESSAGES_CNT = 500
 
