@@ -1110,3 +1110,117 @@ async def test_check_user_data_updated_generate_events_several_users(in_memory_a
     uids.remove(catched_events[0].user_id)
     assert catched_events[1].user_id in uids
     uids.remove(catched_events[1].user_id)
+
+
+# ==============================================================================================
+# Main cycle
+
+@pytest.mark.asyncio
+async def test_main_cycle_default_state_stopped(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+    assert adbot_srv._stop == True
+    assert adbot_srv._stopped == True
+
+
+@pytest.mark.asyncio
+async def test_main_cycle_state_runned_after_run_cmd(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    async def fake_loop():
+        while not adbot_srv._stop:
+            await asyncio.sleep(0.00000001)     # wait
+
+    adbot_srv._loop = fake_loop
+    task = asyncio.create_task(adbot_srv.run())
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    assert adbot_srv._stop == False
+    assert adbot_srv._stopped == False
+    
+    await adbot_srv.stop()
+    task.cancel()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+
+
+@pytest.mark.asyncio
+async def test_main_cycle_state_stopped_after_stop_cmd(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    async def fake_loop():
+        while not adbot_srv._stop:
+            await asyncio.sleep(0.00000001)     # wait
+
+    adbot_srv._loop = fake_loop
+    task = asyncio.create_task(adbot_srv.run())
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    await adbot_srv.stop()
+    assert adbot_srv._stop == True
+    assert adbot_srv._stopped == True
+    counter = 5
+    while counter and not task.done():
+        await asyncio.sleep(0.00000001)     # Wait
+        counter -= 1
+    assert task.done() == True
+
+
+@pytest.mark.asyncio
+async def test_main_cycle_generates_AdBotStop_event_after_stop_cmd(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    catched_events = []
+    async def fake_subscriber_func_local(event: mb.AdBotEvent):
+        catched_events.append(event)
+
+    adbot_srv.messagebus.subscribe([events.AdBotStop], fake_subscriber_func_local)
+
+    async def fake_loop(self):
+        while not self._stop:
+            await asyncio.sleep(0.00000001)     # wait
+
+    adbot_srv._loop = fake_loop
+    task = asyncio.create_task(adbot_srv.run())
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+   
+    await adbot_srv.stop()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    assert len(catched_events) == 1
+    assert catched_events[0].__class__ == events.AdBotStop
+
+
+@pytest.mark.asyncio
+async def test_main_cycle_reraises_and_stops_on_exception_in_loop(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    async def fake_loop(self):
+        raise Exception()
+
+    adbot_srv._loop = fake_loop
+    with pytest.raises(Exception):
+        await adbot_srv.run()
+    assert adbot_srv._stopped == True
+    assert adbot_srv._stop == True
+
+
+@pytest.mark.asyncio
+async def test_main_cycle_generatesAdBotStop_event_on_exception_in_loop(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    catched_events = []
+    async def fake_subscriber_func_local(event: mb.AdBotEvent):
+        catched_events.append(event)
+
+    adbot_srv.messagebus.subscribe([events.AdBotStop], fake_subscriber_func_local)
+
+    async def fake_loop(self):
+        raise Exception()
+
+    adbot_srv._loop = fake_loop
+    with pytest.raises(Exception):
+        await adbot_srv.run()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    assert len(catched_events) == 1
+    assert catched_events[0].__class__ == events.AdBotStop

@@ -19,6 +19,8 @@ from . import exceptions as exc
 # ForwardFunc: TypeAlias = Callable[[int, str], Awaitable[bool]]
 
 IDLE_TIMEOUT_MINUTES = 2
+CHECK_IDLE_CYCLES = 10
+CHECK_IDLE_INTERVAL_SEC = 20
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -31,6 +33,8 @@ class AdBotServices():
             Initializes object, preload data from DB into cache (menu_closed states).
             Raises `AdBotExceptionSQL` exception on DB error.
         """
+        self._stop = True
+        self._stopped = True
         self._db_pool = db_pool
         self.messagebus = MessageBus()
         self._updated_uids = set()  # ids of users whose data were updated by _process_messages method
@@ -437,34 +441,64 @@ class AdBotServices():
 
     async def run(self) -> None:
         """
-            Main cycle.
+            Runs Main cycle.
+            Reraises any exceptions except `AdBotExceptionSQL`.
+            Posts `AdBotStop` event after loop exit.
+        """
+        logger.debug(f"Start main cycle at {datetime.now()}")
+        self._stop = False
+        self._stopped = False
+        try:
+            await self._loop()
+        finally:
+            self._stop = True
+            self._stopped = True
+            self.messagebus.post_event(events.AdBotStop())
+
+
+    async def _loop(self) -> None:
+        """
             Processes messages (filter by users's keywords).
             Generates `AdBotMessageForwardRequest` events to forward messages to users.
             Checks users's inactivity state and generates `AdBotInactivityTimeout` to close menus of inactive users.
             Generates `AdBotUserDataUpdated` events for users with opened menu whose data was updated.
         """
-        logger.debug(f"Start main cycle at {datetime.now()}")
         while not self._stop:
-            counter = 10
+            counter = CHECK_IDLE_CYCLES
             while (not self._stop) and (counter > 0):
                 logger.debug(f"Check idle timeouts")
                 await self._check_idle_timeouts()
-                await asyncio.sleep(20)
+                await asyncio.sleep(CHECK_IDLE_INTERVAL_SEC)
                 counter -= 1
-            
-            logger.debug(f"Process messages")
-            try:
-                await self._process_messages()
-            except exc.AdBotExceptionSQL:
-                logger.error(f'Database error during processing messages')
 
-            logger.debug(f"Forward messages")
-            try:
-                await self._forward_messages()
-            except exc.AdBotExceptionSQL:
-                logger.error(f'Database error during forwarding messages')
-            
-            logger.debug(f"Forward messages")
-            await self._check_user_data_updated()
+            if  not self._stop:
+                logger.debug(f"Process messages")
+                try:
+                    await self._process_messages()
+                except exc.AdBotExceptionSQL:
+                    logger.error(f'Database error during processing messages')
+
+                logger.debug(f"Forward messages")
+                try:
+                    await self._forward_messages()
+                except exc.AdBotExceptionSQL:
+                    logger.error(f'Database error during forwarding messages')
+                
+                logger.debug(f"Forward messages")
+                await self._check_user_data_updated()
+
+
+    async def stop(self) -> None:
+        """
+            Stops main cycle.
+            Sets `stop` flag to True and wait untill main cycle stopped.
+            `AppStop` event will be posted after loop exit.
+        """
+        logger.debug(f"Stopping main cycle at {datetime.now()}")
+        self._stop = True
+        while not self._stopped:
+            await asyncio.sleep(0.5)
+        logger.debug(f"Main cycle stopped at {datetime.now()}")
+
 
 
