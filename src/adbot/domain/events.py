@@ -27,4 +27,6 @@ class AdBotMessageForwardRequest(AdBotEvent):
     message_url: str
     message_text: str
 
-
+@dataclass
+class AdBotStop(AdBotEvent):
+    pass
