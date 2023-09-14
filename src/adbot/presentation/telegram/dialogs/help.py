@@ -14,9 +14,7 @@ from aiogram_dialog import Dialog
 from aiogram_dialog.widgets.input import MessageInput
 
 from adbot.domain.services import AdBotServices
-from .common import (
-    data_getter, on_unexpected_input
-)
+from .common import (on_unexpected_input)
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +78,6 @@ main_help_window = Window(
     Next(text=Const('List of chats')),
     Cancel(text=Const("Close")),
     MessageInput(on_unexpected_input),
-    getter=data_getter,
     disable_web_page_preview=True,
     state=HelpSG.main,
 )
@@ -112,7 +109,6 @@ chats_list_help_window = Window(
     Back(text=Const('Back')),
     Cancel(text=Const("Close")),
     MessageInput(on_unexpected_input),
-    getter=data_getter,
     disable_web_page_preview=True,
     state=HelpSG.chats_list,
 
@@ -133,13 +129,16 @@ dialog_closed_window = Window(
 # ======================================================================================================
 # Dialog object
 
-async def on_dialog_close(result: Any, manager: DialogManager, ad_bot_srv: AdBotServices):
+async def on_dialog_close(result: Any, manager: DialogManager):
 
+    ad_bot_srv: AdBotServices = manager.middleware_data.get('ad_bot_srv')
     event = manager.event
 
     if hasattr(event, "from_user"):
         logger.debug(f'on_dialog_close, user={event.from_user.id}')
-        await ad_bot_srv.set_menu_closed_state(event.from_user.id, True)
+        user = await ad_bot_srv.get_user_by_telegram_id(event.from_user.id)
+
+        await ad_bot_srv.set_menu_closed_state(user.id, True)
     else:
         logger.error(f'on_dialog_close. Event object class {event.__class__} doesn`t have attr "from_user"')
 

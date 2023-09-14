@@ -1,15 +1,15 @@
 import logging
 
-from aiogram import Dispatcher
-from aiogram.types import Message, BotCommand, BotCommandScopeAllPrivateChats
-from aiogram_dialog import DialogManager, StartMode, setup_dialogs, ShowMode
-from aiogram_dialog.api.exceptions import NoContextError, UnknownIntent, UnknownState
+from aiogram.types import Message
+from aiogram_dialog import DialogManager, StartMode, ShowMode
+from aiogram_dialog.api.exceptions import NoContextError
 
 from adbot.domain import exceptions as exc
 from adbot.domain.services import AdBotServices
 from . import dialogs
 
 logger = logging.getLogger(__name__)
+
 
 async def _send_service_unavailable_error_msg(dialog_manager: DialogManager):
     await dialog_manager.start(
@@ -20,49 +20,43 @@ async def _send_service_unavailable_error_msg(dialog_manager: DialogManager):
 
 
 async def start_cmd_handler(
-        message: Message, dialog_manager: DialogManager, ad_bot_srv: AdBotServices
-    ):
-
+    message: Message, dialog_manager: DialogManager, ad_bot_srv: AdBotServices
+):
     logger.debug(f'`start` command, user={message.from_user.id}')
-
-    await dialog_close_cmd_handler(message, dialog_manager=dialog_manager)
-    
+    await message.delete()
     user_telegram_id = message.from_user.id
     user_telegram_name = message.from_user.username
-    
     try:
-        try:
-            user_data = await ad_bot_srv.get_user_by_telegram_id(user_telegram_id)
-        except exc.AdBotExceptionUserNotExist:
-            user_data = await ad_bot_srv.create_user_by_telegram_data(
-                user_telegram_id, user_telegram_name
-            )
-    except exc.AdBotExceptionSQL:
-        user_data = None
-
-    if user_data:
-        await message.delete()
+        user_data = await ad_bot_srv.get_or_create_user_by_telegram_data(
+            user_telegram_id, user_telegram_name
+        )
+        await dialog_close_cmd_handler(message, dialog_manager=dialog_manager)
         await dialog_manager.start(
             dialogs.settings.SettingsSG.main, mode=StartMode.RESET_STACK
         )
         await ad_bot_srv.set_menu_closed_state(user_data.id, False)
-    else:
+    except exc.AdBotException:
         logger.error(f'DB error in `start` command handler')
-        await _send_service_unavailable_error_msg(dialog_manager)
+        raise
 
 
-async def show_help(message: Message, dialog_manager: DialogManager):
+async def show_help(
+    message: Message, dialog_manager: DialogManager, ad_bot_srv: AdBotServices
+):
     logger.debug(f'`help` command, user={message.from_user.id}')
-    await dialog_close_cmd_handler(message, dialog_manager)
-    # user_id = message.from_user.id
-    # user_name = message.from_user.username
-    # user_data = await bf.get_user_add_refresh_reset(user_id, user_name)
-    # if user_data:
     await message.delete()
-    await dialog_manager.start(help.HelpSG.main, mode=StartMode.RESET_STACK)
-    # else:
-    #     logger.error(f'DB error in `help` command handler')
-    #     await message.answer("Service unavailable. Please try later.")
+    user_telegram_id = message.from_user.id
+    user_telegram_name = message.from_user.username
+    try:
+        user_data = await ad_bot_srv.get_or_create_user_by_telegram_data(
+            user_telegram_id, user_telegram_name
+        )
+        await dialog_close_cmd_handler(message, dialog_manager=dialog_manager)
+        await dialog_manager.start(dialogs.help.HelpSG.main, mode=StartMode.RESET_STACK)
+        await ad_bot_srv.set_menu_closed_state(user_data.id, False)
+    except exc.AdBotException:
+        logger.error(f'DB error in `help` command handler')
+        raise
 
 
 async def stop_bot(

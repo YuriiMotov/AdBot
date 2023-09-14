@@ -1,4 +1,3 @@
-import asyncio
 from datetime import datetime
 import logging
 
@@ -6,8 +5,8 @@ from aiogram import Bot, Dispatcher
 from aiogram.filters import and_f, Command, ExceptionTypeFilter
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
 from aiogram.types import Chat, User, Message, Update, BotCommand, BotCommandScopeAllPrivateChats
-from aiogram_dialog import DialogManager, StartMode, setup_dialogs, ShowMode
-from aiogram_dialog.api.exceptions import NoContextError, UnknownIntent, UnknownState
+from aiogram_dialog import setup_dialogs
+from aiogram_dialog.api.exceptions import UnknownIntent, UnknownState
 from redis.asyncio.client import Redis
 
 from adbot.domain import events
@@ -20,12 +19,11 @@ from ..presentation_interface import PresentationInterface
 
 logger = logging.getLogger(__name__)
 
-
 class TGBot(PresentationInterface):
     def __init__(
-                self, ad_bot_srv: AdBotServices, bot_token: str, redis_db: int,
-                admin_id: int, message_manager=None
-            ) -> None:
+        self, ad_bot_srv: AdBotServices, bot_token: str, redis_db: int,
+        admin_id: int, message_manager=None
+    ) -> None:
         
         super().__init__(ad_bot_srv)
         
