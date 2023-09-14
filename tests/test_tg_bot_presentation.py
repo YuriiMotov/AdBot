@@ -1,22 +1,15 @@
 import asyncio
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 import pytest
-from typing import Optional
 from unittest.mock import AsyncMock, patch
-import sys
 
-from aiogram.types import Message
-from aiogram_dialog.api.protocols import MessageManagerProtocol
-from aiogram_dialog.test_tools import BotClient, MockMessageManager
 from aiogram_dialog.test_tools.keyboard import InlineButtonTextLocator
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from adbot.domain import models
-from adbot.domain.services import AdBotServices, IDLE_TIMEOUT_MINUTES
+from adbot.domain.services import IDLE_TIMEOUT_MINUTES
 from adbot.domain.services import events
-from adbot.presentation.telegram.tg_bot import TGBot
 from conftest import Env, brake_sessionmaker
 
 # ========================================================================================
@@ -60,6 +53,75 @@ async def test_start_cmd_shows_error_msg_on_sql_error(env: Env):
 
     message = env.message_manager.one_message()
     assert message.text.find('Service unavailable. Please try later') > 0
+
+
+@pytest.mark.asyncio
+async def test_start_cmd_closes_previous_dialog(env: Env):
+    await env.client.send('/start')
+    env.message_manager.reset_history()
+    await env.client.send('/start')
+    assert len(env.message_manager.sent_messages) == 3
+    assert env.message_manager.sent_messages[0].text.find('Settings menu is closed') >= 0
+    assert env.message_manager.sent_messages[2].text.startswith('<b>Subscr')
+
+
+
+# help cmd
+
+@pytest.mark.asyncio
+async def test_help_cmd_user_doesnt_exist(env: Env):
+    await env.client.send('/help')
+    message = env.message_manager.one_message()
+    assert message.text.startswith('<b>Help</b>') == True
+
+
+@pytest.mark.asyncio
+async def test_help_cmd_user_exist(env: Env):
+    await env.ad_bot_srv.create_user_by_telegram_data(
+        env.client.user.id, env.client.user.full_name
+    )
+    await env.client.send('/help')
+    message = env.message_manager.one_message()
+    assert message.text.startswith('<b>Help</b>') == True
+
+
+@pytest.mark.asyncio
+async def test_help_dialog_close_shows_points(env: Env):
+    await env.client.send('/help')
+    message = env.message_manager.one_message()
+    env.message_manager.reset_history()
+    callback_id = await env.client.click(
+        message, InlineButtonTextLocator('Close')
+    )
+    env.message_manager.assert_answered(callback_id)
+
+    assert len(env.message_manager.sent_messages) == 1
+    assert env.message_manager.sent_messages[0].text is None
+
+
+@pytest.mark.asyncio
+async def test_help_dialog_close_shows_points(env: Env):
+    await env.client.send('/help')
+    message = env.message_manager.one_message()
+    env.message_manager.reset_history()
+    callback_id = await env.client.click(
+        message, InlineButtonTextLocator('Close')
+    )
+    env.message_manager.assert_answered(callback_id)
+    assert len(env.message_manager.sent_messages) == 1
+    assert env.message_manager.sent_messages[0].text is None
+
+
+@pytest.mark.asyncio
+async def test_help_cmd_closes_previous_dialog(env: Env):
+    await env.client.send('/start')
+    env.message_manager.reset_history()
+    await env.client.send('/help')
+    assert len(env.message_manager.sent_messages) == 3
+    assert env.message_manager.sent_messages[0].text.find('Settings menu is closed') >= 0
+    assert env.message_manager.sent_messages[2].text.startswith('<b>Help</b>')
+
+
 
 
 # ========================================================================================
@@ -438,9 +500,8 @@ async def test_stopbot_cmd_from_not_admin_does_nothing(env: Env):
     with patch('adbot.domain.services.AdBotServices.stop', new=AsyncMock()):
         await env.client.send('/stop_bot')
         env.ad_bot_srv.stop.assert_not_awaited()
+    
 
 
 
-
-# help
 # send to user who blocked bot

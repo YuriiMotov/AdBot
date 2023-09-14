@@ -154,6 +154,21 @@ class AdBotServices():
         except exc.AdBotExceptionUserNotExist:
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
 
+    async def get_or_create_user_by_telegram_data(
+            self, telegram_id: int, telegram_name: str
+    ) -> models.User:
+        """
+            Returns `user` object by `telegram_id` key.
+            Creates user if doesn't exist.
+            Raises:
+                `AdBotExceptionSQL` exception on DB error
+        """
+        try:
+            return await self.get_user_by_telegram_id(telegram_id)
+        except exc.AdBotExceptionUserNotExist:
+            return await self.create_user_by_telegram_data(telegram_id, telegram_name)
+
+
 
     # Subscription management
 

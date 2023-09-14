@@ -69,7 +69,7 @@ def env(in_memory_adbot_srv: AdBotServices) -> Env:
         in_memory_adbot_srv, '', 0, e.admin_id, e.message_manager
     )
 
-    tg_user_id = random.randint(e.admin_id, e.admin_id * 10)
+    tg_user_id = random.randint(e.admin_id + 1, e.admin_id * 10)
     e.client = BotClient(e.tg_bot._dp, tg_user_id, tg_user_id)
     e.client_admin = BotClient(e.tg_bot._dp, e.admin_id, e.admin_id)
 
