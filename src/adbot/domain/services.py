@@ -58,12 +58,13 @@ class AdBotServices():
         logger.error(f'Exception {error.__class__} {error}')
 
 
-    def _get_user_by_id(self, session: Session, user_id: int) -> Optional[models.User]:
+    def _get_user_by_id(self, session: Session, user_id: int) -> models.User:
         """
             Returns `user` object by primary key `id`.
             Gets `session` as a parameter.
-            Returns `None` if user doesn't exist.
-            Raises `AdBotExceptionSQL` exception on DB error.
+            Raises:
+                `AdBotExceptionUserNotExist` if user doesn't exist
+                `AdBotExceptionSQL` exception on DB error
         """
         st = select(models.User) \
                 .outerjoin_from(models.User, models.user_message_link).group_by(models.User.id) \
@@ -76,17 +77,21 @@ class AdBotServices():
                     )
                 )
         try:
-            return session.scalar(st)
+            user = session.scalar(st)
+            if user is not None:
+                return user
+            raise exc.AdBotExceptionUserNotExist(f"User with id={user_id} doesn`t exist")
         except SQLAlchemyError as e:
             self._db_error_handle(e)
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
 
 
-    async def get_user_by_id(self, user_id: int) -> Optional[models.User]:
+    async def get_user_by_id(self, user_id: int) -> models.User:
         """
             Returns `user` object by primary key `id`.
-            Returns `None` if user doesn't exist.
-            Raises `AdBotExceptionSQL` exception on DB error.
+            Raises:
+                `AdBotExceptionUserNotExist` if user doesn't exist
+                `AdBotExceptionSQL` exception on DB error
         """
         try:
             with self._db_pool() as session:
@@ -96,11 +101,12 @@ class AdBotServices():
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
         
 
-    async def get_user_by_telegram_id(self, telegram_id: int) -> Optional[models.User]:
+    async def get_user_by_telegram_id(self, telegram_id: int) -> models.User:
         """
             Returns `user` object by `telegram_id` key.
-            Returns `None` if user doesn't exist.
-            Raises `AdBotExceptionSQL` exception on DB error.
+            Raises:
+                `AdBotExceptionUserNotExist` if user doesn't exist
+                `AdBotExceptionSQL` exception on DB error
         """
         try:
             with self._db_pool() as session:
@@ -114,7 +120,12 @@ class AdBotServices():
                                 func.count(models.user_message_link.c.user_id)
                             )
                         )
-                return session.scalar(st)
+                user = session.scalar(st)
+                if user is not None:
+                    return user
+                raise exc.AdBotExceptionUserNotExist(
+                    f"User with telegram_id={telegram_id} doesn`t exist"
+                )
         except SQLAlchemyError as e:
             self._db_error_handle(e)
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
@@ -138,10 +149,9 @@ class AdBotServices():
             self._db_error_handle(e)
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
         
-        user = await self.get_user_by_telegram_id(telegram_id)
-        if user:
-            return user
-        else:
+        try:
+            return await self.get_user_by_telegram_id(telegram_id)
+        except exc.AdBotExceptionUserNotExist:
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
 
 
@@ -159,13 +169,12 @@ class AdBotServices():
         try:
             with self._db_pool() as session:
                 user = self._get_user_by_id(session, user_id)
-                if user is None:
-                    raise exc.AdBotExceptionUserNotExist(f"User {user_id} doesn`t exist")
                 user.subscription_state = new_state
                 session.commit()
         except SQLAlchemyError as e:
             self._db_error_handle(e)
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
+
 
     # Forwarding state management
 
@@ -181,8 +190,6 @@ class AdBotServices():
         try:
             with self._db_pool() as session:
                 user = self._get_user_by_id(session, user_id)
-                if user is None:
-                    raise exc.AdBotExceptionUserNotExist(f"User {user_id} doesn`t exist")
                 user.forwarding_state = new_state
                 session.commit()
         except SQLAlchemyError as e:
@@ -204,8 +211,6 @@ class AdBotServices():
         try:
             with self._db_pool() as session:
                 user = self._get_user_by_id(session, user_id)
-                if user is None:
-                    raise exc.AdBotExceptionUserNotExist(f"User {user_id} doesn`t exist")
                 user.menu_closed = new_state
                 session.commit()
         except SQLAlchemyError as e:
@@ -223,7 +228,7 @@ class AdBotServices():
 
     # Idle timeout managment
 
-    async def reset_idle_timeout(self, user_id) -> None:
+    async def reset_inactivity_timer(self, user_id) -> None:
         """
             Updates `last activity dt` in cache, sets it to now().
             `last activity dt` is used to determine when user forgot to close the menu.
@@ -231,7 +236,7 @@ class AdBotServices():
         """
         user_menu_activity_data = self._menu_activity_cache.get(user_id)
         if user_menu_activity_data is None:
-            logger.error(f'reset_idle_timeout called for user with closed menu: {user_id}')
+            logger.error(f'reset_inactivity_timer called for user with closed menu: {user_id}')
             user_menu_activity_data = {'menu_closed': False}
             self._menu_activity_cache[user_id] = user_menu_activity_data
         user_menu_activity_data['act_dt'] = datetime.now()
@@ -265,13 +270,9 @@ class AdBotServices():
         try:
             with self._db_pool() as session:
                 user = self._get_user_by_id(session, user_id)
-                if user is None:
-                    raise exc.AdBotExceptionUserNotExist(f"User {user_id} doesn`t exist")
-                
                 kw = session.scalar(select(models.Keyword).where(models.Keyword.word == keyword))
                 if kw is None:
                     kw = models.Keyword(word=keyword)
-
                 if kw not in user.keywords:
                     user.keywords.append(kw)
                 session.commit()
@@ -293,8 +294,6 @@ class AdBotServices():
         try:
             with self._db_pool() as session:
                 user = self._get_user_by_id(session, user_id)
-                if user is None:
-                    raise exc.AdBotExceptionUserNotExist(f"User {user_id} doesn`t exist")
                 kw = session.scalar(select(models.Keyword).where(models.Keyword.word == keyword))
                 if kw:
                     if kw in user.keywords:

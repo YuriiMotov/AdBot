@@ -40,6 +40,7 @@ class User(Base):
     forwarding_state: Mapped[bool] = mapped_column(Boolean, nullable=True, default=False)
     menu_closed: Mapped[bool] = mapped_column(Boolean, nullable=True, default=True)
     forward_queue_len: Mapped[int] = query_expression()
+    keywords_limit: int = 10
 
     forward_queue: Mapped[List["GroupChatMessage"]] = relationship(
         secondary=user_message_link, back_populates="users"
