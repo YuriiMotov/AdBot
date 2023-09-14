@@ -10,25 +10,7 @@ from adbot.domain.services import AdBotServices, exc, IDLE_TIMEOUT_MINUTES
 from adbot.domain import models
 from adbot.domain import messagebus as mb
 from adbot.domain import events
-
-
-# ==============================================================================================
-# helpers
-
-def mock_method_raise_SQLAlchemyError(*arg, **kwarg):
-    raise SQLAlchemyError()
-
-
-def brake_sessionmaker(db_pool: sessionmaker):
-    def broken_session_maker():
-        session = db_pool()
-        session.commit = mock_method_raise_SQLAlchemyError
-        session.scalar = mock_method_raise_SQLAlchemyError
-        session.scalars = mock_method_raise_SQLAlchemyError
-        session.execute = mock_method_raise_SQLAlchemyError
-        return session
-
-    return broken_session_maker
+from conftest import brake_sessionmaker
 
 
 # ==============================================================================================
@@ -49,21 +31,23 @@ def test_adbot_init_raises_exception_on_sql_error(in_memory_db_sessionmaker):
 # get_user, create_user (by user_id, by telegram_id)
 
 @pytest.mark.asyncio
-async def test_get_user_by_user_id_returns_none_when_user_doesnt_exist(in_memory_adbot_srv: AdBotServices):
+async def test_get_user_by_user_id_raises_UserNotExist_when_user_doesnt_exist(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.get_user_by_id(123)
-    
-    assert user is None
+    with pytest.raises(exc.AdBotExceptionUserNotExist):
+        await adbot_srv.get_user_by_id(123)
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_tg_id_returns_none_when_user_doesnt_exist(in_memory_adbot_srv: AdBotServices):
+async def test_get_user_by_tg_id_raises_UserNotExist_when_user_doesnt_exist(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.get_user_by_telegram_id(123456789)
-    
-    assert user is None
+    with pytest.raises(exc.AdBotExceptionUserNotExist):
+        await adbot_srv.get_user_by_telegram_id(123456789)
 
 
 @pytest.mark.asyncio
@@ -391,7 +375,7 @@ async def test_get_is_idle_on_user_with_timeout_less_when_limit_returns_false(in
 
 
 @pytest.mark.asyncio
-async def test_get_reset_idle_timeout(in_memory_db_sessionmaker):
+async def test_get_reset_inactivity_timer(in_memory_db_sessionmaker):
     with in_memory_db_sessionmaker() as session:
         session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
         session.commit()
@@ -401,7 +385,7 @@ async def test_get_reset_idle_timeout(in_memory_db_sessionmaker):
     adbot_srv._menu_activity_cache[1]['act_dt'] = idle_point
     assert (await adbot_srv.get_is_idle_with_opened_menu(1)) == True
     
-    await adbot_srv.reset_idle_timeout(1)
+    await adbot_srv.reset_inactivity_timer(1)
     assert (await adbot_srv.get_is_idle_with_opened_menu(1)) == False
 
 
@@ -881,7 +865,7 @@ async def test_inactivity_timeouts_none_when_user_active(in_memory_adbot_srv: Ad
 
     user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     await adbot_srv.set_menu_closed_state(user.id, False)
-    await adbot_srv.reset_idle_timeout(user.id)
+    await adbot_srv.reset_inactivity_timer(user.id)
     await adbot_srv._check_idle_timeouts()
     await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
 
