@@ -78,6 +78,7 @@ async def on_menu_navigate_click(
         callback: CallbackQuery, button: Button, manager: DialogManager
 ):
     ad_bot_srv: AdBotServices = manager.middleware_data.get('ad_bot_srv')
-    logger.debug(f'on_menu_navigate_click, user={callback.from_user.id}, button={button.widget_id}')
-    await ad_bot_srv.reset_inactivity_timer(manager.event.from_user.id)
+    user = await ad_bot_srv.get_user_by_telegram_id(callback.from_user.id)
+    logger.debug(f'on_menu_navigate_click, user={user.id}, button={button.widget_id}')
+    await ad_bot_srv.reset_inactivity_timer(user.id)
 

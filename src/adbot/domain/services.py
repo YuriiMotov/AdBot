@@ -142,6 +142,7 @@ class AdBotServices():
                 user = models.User()
                 user.telegram_id = telegram_id
                 user.telegram_name = telegram_name
+                user.forwarding_state = True
                 user.forward_queue_len = 0
                 session.add(user)
                 session.commit()

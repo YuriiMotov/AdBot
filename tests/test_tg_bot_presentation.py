@@ -335,12 +335,6 @@ async def test_show_in_menu_number_of_messages_in_the_queue(env: Env):
 @pytest.mark.asyncio
 async def test_MessageForwardRequest_event_handler_sends_message(env: Env):
     msg_url = 'https://t.me'
-    # Subscribe for `MessageForwardRequest` events
-    env.ad_bot_srv.messagebus.subscribe(
-        [events.AdBotMessageForwardRequest],
-        env.tg_bot.user_message_forward_request_handler
-    )
-
     # Create user, message and add message to user's queue
     session: Session
     with env.ad_bot_srv._db_pool() as session:
@@ -371,11 +365,6 @@ async def test_MessageForwardRequest_event_handler_sends_message(env: Env):
 
 @pytest.mark.asyncio
 async def test_InactivityTimeout_event_handler_sends_closedialog_cmd(env: Env):
-    # Subscribe for `InactivityTimeout` events
-    env.ad_bot_srv.messagebus.subscribe(
-        [events.AdBotInactivityTimeout],
-        env.tg_bot.user_inactivity_timeout_handler
-    )
     # Open menu, imitate idle timeout
     await env.client.send('/menu')
     user = await env.ad_bot_srv.get_user_by_telegram_id(env.client.user.id)
@@ -426,11 +415,6 @@ async def test_closedialog_cmd_does_nothing_when_menu_is_closed(env: Env):
 
 @pytest.mark.asyncio
 async def test_UserDataUpdated_event_handler_sends_refreshdialog_cmd(env: Env):
-    # Subscribe for `AdBotUserDataUpdated` events
-    env.ad_bot_srv.messagebus.subscribe(
-        [events.AdBotUserDataUpdated],
-        env.tg_bot.user_data_updated_handler
-    )
     # Open menu, change user data
     await env.client.send('/menu')
     session: Session
@@ -502,6 +486,6 @@ async def test_stopbot_cmd_from_not_admin_does_nothing(env: Env):
         env.ad_bot_srv.stop.assert_not_awaited()
     
 
-
+# menu navigation resets inactivity timer
 
 # send to user who blocked bot
