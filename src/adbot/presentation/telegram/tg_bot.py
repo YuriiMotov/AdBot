@@ -67,6 +67,24 @@ class TGBot(PresentationInterface):
         self._dp.include_router(help.get_dialog())
         self._dp.include_router(errors.get_dialog())
         setup_dialogs(self._dp, message_manager=message_manager)
+        
+        # Subscribe for events from services
+        self._subscribe_for_events()
+
+
+    def _subscribe_for_events(self):
+        self._ad_bot_srv.messagebus.subscribe(
+            [events.AdBotInactivityTimeout], self.user_inactivity_timeout_handler
+        )
+        self._ad_bot_srv.messagebus.subscribe(
+            [events.AdBotMessageForwardRequest], self.user_message_forward_request_handler
+        )
+        self._ad_bot_srv.messagebus.subscribe(
+            [events.AdBotUserDataUpdated], self.user_data_updated_handler
+        )
+        self._ad_bot_srv.messagebus.subscribe(
+            [events.AdBotStop], self.stop_event_handler
+        )
 
 
     def _create_bot(self, bot_token: str) -> Bot:
@@ -115,7 +133,7 @@ class TGBot(PresentationInterface):
         except exc.AdBotExceptionSQL:
             return
         await self._send_bot_cmd('/close_dialog', user.telegram_id)
-    
+
 
     async def user_data_updated_handler(self, event: events.AdBotUserDataUpdated):
         try:

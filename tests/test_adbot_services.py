@@ -185,14 +185,14 @@ async def test_set_subscription_state_raises_exception_on_sql_error(in_memory_ad
 # user forwarding state management
 
 @pytest.mark.asyncio
-async def test_forwarding_state_default_is_false(in_memory_adbot_srv: AdBotServices):
+async def test_forwarding_state_default_is_true_for_telegram_user(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
     user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
-    assert user.forwarding_state is False
+    assert user.forwarding_state is True
 
     user = await adbot_srv.get_user_by_telegram_id(123456789)
-    assert user.forwarding_state is False
+    assert user.forwarding_state is True
 
 
 @pytest.mark.asyncio
@@ -200,15 +200,15 @@ async def test_set_forwarding_state(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
     user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
-    assert user.forwarding_state is False
-
-    await adbot_srv.set_forwarding_state(user.id, True)
-    user = await adbot_srv.get_user_by_telegram_id(123456789)
     assert user.forwarding_state is True
 
     await adbot_srv.set_forwarding_state(user.id, False)
     user = await adbot_srv.get_user_by_telegram_id(123456789)
     assert user.forwarding_state is False
+
+    await adbot_srv.set_forwarding_state(user.id, True)
+    user = await adbot_srv.get_user_by_telegram_id(123456789)
+    assert user.forwarding_state is True
 
 
 @pytest.mark.asyncio
@@ -216,24 +216,22 @@ async def test_set_forwarding_state_two_users(in_memory_adbot_srv: AdBotServices
     adbot_srv = in_memory_adbot_srv
 
     user1 = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
-    assert user1.forwarding_state is False
     user2 = await adbot_srv.create_user_by_telegram_data(telegram_id=987654321, telegram_name='dsa')
-    assert user2.forwarding_state is False
 
-    await adbot_srv.set_forwarding_state(user1.id, True)
-    
-    user1 = await adbot_srv.get_user_by_telegram_id(123456789)
-    assert user1.forwarding_state is True
-    user2 = await adbot_srv.get_user_by_telegram_id(987654321)
-    assert user2.forwarding_state is False
-
-    await adbot_srv.set_forwarding_state(user2.id, True)
     await adbot_srv.set_forwarding_state(user1.id, False)
-
+    
     user1 = await adbot_srv.get_user_by_telegram_id(123456789)
     assert user1.forwarding_state is False
     user2 = await adbot_srv.get_user_by_telegram_id(987654321)
     assert user2.forwarding_state is True
+
+    await adbot_srv.set_forwarding_state(user2.id, False)
+    await adbot_srv.set_forwarding_state(user1.id, True)
+
+    user1 = await adbot_srv.get_user_by_telegram_id(123456789)
+    assert user1.forwarding_state is True
+    user2 = await adbot_srv.get_user_by_telegram_id(987654321)
+    assert user2.forwarding_state is False
 
 
 @pytest.mark.asyncio
@@ -252,7 +250,7 @@ async def test_set_forwarding_state_raises_exception_on_sql_error(in_memory_adbo
 
     adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)    # broken DB returns SQLAlchemyError on every query and commit
     with pytest.raises(exc.AdBotExceptionSQL):
-        await adbot_srv.set_forwarding_state(user.id, True)
+        await adbot_srv.set_forwarding_state(user.id, False)
 
 
 # ==============================================================================================
@@ -757,7 +755,6 @@ async def test_forward_messages(in_memory_adbot_srv: AdBotServices):
 
     user = await adbot_srv.create_user_by_telegram_data(11111, 'asd')
     await adbot_srv.set_subscription_state(user.id, True)
-    await adbot_srv.set_forwarding_state(user.id, True)
     await adbot_srv.add_keyword(user.id, 'apple')
     await adbot_srv.add_keyword(user.id, 'bicycle')
     await adbot_srv._process_messages()
@@ -779,6 +776,32 @@ async def test_forward_messages(in_memory_adbot_srv: AdBotServices):
 
 
 @pytest.mark.asyncio
+async def test_forward_messages_does_nothing_if_forwarding_disabled(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    catched_events = []
+    async def fake_subscriber_func_local(event: mb.AdBotEvent):
+        catched_events.append(event)
+
+    adbot_srv.messagebus.subscribe([events.AdBotMessageForwardRequest], fake_subscriber_func_local)
+
+    await adbot_srv.add_message(11, 22, 'apple banana orange', 'https://t.me/c/123/456')
+    await adbot_srv.add_message(12, 23, 'car bicycle', 'https://t.me/c/234/567')
+
+    user = await adbot_srv.create_user_by_telegram_data(11111, 'asd')
+    await adbot_srv.set_subscription_state(user.id, True)
+    await adbot_srv.set_forwarding_state(user.id, False)
+    await adbot_srv.add_keyword(user.id, 'apple')
+    await adbot_srv.add_keyword(user.id, 'bicycle')
+    await adbot_srv._process_messages()
+
+    await adbot_srv._forward_messages()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    assert len(catched_events) == 0
+
+
+@pytest.mark.asyncio
 async def test_forward_messages_two_users(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
@@ -794,13 +817,11 @@ async def test_forward_messages_two_users(in_memory_adbot_srv: AdBotServices):
 
     user1 = await adbot_srv.create_user_by_telegram_data(11111, 'asd')
     await adbot_srv.set_subscription_state(user1.id, True)
-    await adbot_srv.set_forwarding_state(user1.id, True)
     await adbot_srv.add_keyword(user1.id, 'apple')
     await adbot_srv.add_keyword(user1.id, 'bicycle')
 
     user2 = await adbot_srv.create_user_by_telegram_data(22222, 'dsa')
     await adbot_srv.set_subscription_state(user2.id, True)
-    await adbot_srv.set_forwarding_state(user2.id, True)
     await adbot_srv.add_keyword(user2.id, 'bicycle')
     await adbot_srv.add_keyword(user2.id, 'sofa')
 
@@ -962,7 +983,6 @@ async def test_check_user_data_updated_generate_event(in_memory_adbot_srv: AdBot
 
     user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     await adbot_srv.set_subscription_state(user.id, True)
-    await adbot_srv.set_forwarding_state(user.id, True)
     await adbot_srv.set_menu_closed_state(user.id, False)
     await adbot_srv.add_keyword(user.id, 'apple')
     await adbot_srv.add_message(1, 1, 'apple and banana', 'http://t.me/c/11/11')
@@ -987,7 +1007,6 @@ async def test_check_user_data_updated_doesnt_generate_event_if_menu_closed(in_m
 
     user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     await adbot_srv.set_subscription_state(user.id, True)
-    await adbot_srv.set_forwarding_state(user.id, True)
     await adbot_srv.add_keyword(user.id, 'apple')
     await adbot_srv.add_message(1, 1, 'apple and banana', 'http://t.me/c/11/11')
     await adbot_srv._process_messages()
@@ -1010,7 +1029,6 @@ async def test_check_user_data_updated_doesnt_duplicate_event(in_memory_adbot_sr
 
     user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     await adbot_srv.set_subscription_state(user.id, True)
-    await adbot_srv.set_forwarding_state(user.id, True)
     await adbot_srv.set_menu_closed_state(user.id, False)
     await adbot_srv.add_keyword(user.id, 'apple')
     await adbot_srv.add_message(1, 1, 'apple and banana', 'http://t.me/c/11/11')
@@ -1037,7 +1055,6 @@ async def test_check_user_data_updated_generate_second_event(in_memory_adbot_srv
 
     user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     await adbot_srv.set_subscription_state(user.id, True)
-    await adbot_srv.set_forwarding_state(user.id, True)
     await adbot_srv.set_menu_closed_state(user.id, False)
     await adbot_srv.add_keyword(user.id, 'apple')
     await adbot_srv.add_message(1, 1, 'apple and banana', 'http://t.me/c/11/11')
@@ -1067,19 +1084,16 @@ async def test_check_user_data_updated_generate_events_several_users(in_memory_a
 
     user1 = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     await adbot_srv.set_subscription_state(user1.id, True)
-    await adbot_srv.set_forwarding_state(user1.id, True)
     await adbot_srv.set_menu_closed_state(user1.id, False)
     await adbot_srv.add_keyword(user1.id, 'apple')
 
     user2 = await adbot_srv.create_user_by_telegram_data(222222, 'dsa')
     await adbot_srv.set_subscription_state(user2.id, True)
-    await adbot_srv.set_forwarding_state(user2.id, True)
     await adbot_srv.set_menu_closed_state(user2.id, False)
     await adbot_srv.add_keyword(user2.id, 'banana')
 
     user3 = await adbot_srv.create_user_by_telegram_data(333333, 'sda')
     await adbot_srv.set_subscription_state(user3.id, True)
-    await adbot_srv.set_forwarding_state(user3.id, True)
     await adbot_srv.set_menu_closed_state(user3.id, False)
     await adbot_srv.add_keyword(user3.id, 'orange')
 

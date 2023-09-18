@@ -1,9 +1,11 @@
 import asyncio
 import logging
+from typing import Optional
 
 from telethon import TelegramClient
-from telethon.tl.types import Message, Entity
+from telethon.tl.types import Message
 from telethon.tl.custom.dialog import Dialog
+from telethon.tl.types import Chat, Channel
 
 from ..interface import MessageFetcher, AddMessageHandler
 
@@ -19,7 +21,7 @@ def _get_dialog_name(dialog: Dialog) -> str:
         return 'None'
 
 
-def _get_msg_url(chat_entity: Entity, message: Message):
+def _get_msg_url(chat_entity: Chat | Channel, message: Message):
     if hasattr(chat_entity, 'username') and chat_entity.username:
         return f'https://t.me/{chat_entity.username}/{message.id}'
     else:
@@ -28,7 +30,10 @@ def _get_msg_url(chat_entity: Entity, message: Message):
 
 class TelegramMessageFetcher(MessageFetcher):
 
-    def __init__(self, add_message_handler: AddMessageHandler, api_id: int, api_hash: str):
+    def __init__(
+        self, add_message_handler: AddMessageHandler, api_id: int, api_hash: str,
+        chats_filter: Optional[list[int]]
+    ):
         super().__init__(add_message_handler)
         self._client = TelegramClient(
                 'telethon.session',
@@ -37,12 +42,13 @@ class TelegramMessageFetcher(MessageFetcher):
                 system_version="4.16.30-vxCUSTOM",
                 retry_delay=3
             )
+        self._chats = chats_filter
 
 
-    async def fetch_messages_new(self) -> None:
+    async def fetch_messages(self) -> None:
         """
-            Goes through all the Group chats and Channels, check new messages and add them
-            to DB by calling handler stored in `_add_message_handler`.
+            Goes through all the Group chats and Channels, checks new messages and adds
+            them to DB by calling handler stored in `_add_message_handler`.
             Skips pprivat chats, messages from bots and messages without `from_id`.
             If there are more unreaded messages in the chat than
             MAX_DIALOG_HISTORY_MESSAGES_CNT, method will parse only the last
@@ -53,12 +59,15 @@ class TelegramMessageFetcher(MessageFetcher):
 
             # Iterate through chats and messages, add messages to DB
             async for dialog in self._client.iter_dialogs():
-                await self._fetch_dialog_messages(dialog)
+                chat_entity = await self._client.get_entity(dialog) # Chat or Channel obj
+                await asyncio.sleep(0.1)
+                if (self._chats is None) or (chat_entity.id in self._chats):
+                    await self._fetch_dialog_messages(dialog, chat_entity)
 
         logger.debug('Telegram message fetcher. `Fetch messages` finiished')
 
 
-    async def _fetch_dialog_messages(self, dialog: Dialog) -> None:
+    async def _fetch_dialog_messages(self, dialog: Dialog, chat_entity: Chat | Channel) -> None:
         if not (dialog.is_channel or dialog.is_group):
             logger.debug(
                 "Telegram message fetcher. " \
@@ -79,10 +88,7 @@ class TelegramMessageFetcher(MessageFetcher):
             logger.warning(f'Telegram message fetcher. Skipped {skipped} msgs')
 
         max_msg_id = 0
-        chat_entity = await self._client.get_entity(dialog)     # Chat or Channel object
-        await asyncio.sleep(0.1)
-
-        messages = self._client.iter_messages(dialog, limit=unread_cnt, reverse=True)
+        messages = self._client.iter_messages(dialog, limit=unread_cnt)
         message: Message
         async for message in messages:
             try:
