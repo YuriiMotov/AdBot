@@ -161,8 +161,10 @@ cython_debug/
 
 
 # Project specific
-database.db
+*.db
 tmp
 telethon.session
 telethon.session-journal
 tmp.txt
+test_database.db
+.vscode/settings.json
