@@ -43,6 +43,7 @@ class TelegramMessageFetcher(MessageFetcher):
                 retry_delay=3
             )
         self._chats = chats_filter
+        self._ignore_bots = True
 
 
     async def fetch_messages(self) -> None:
@@ -67,7 +68,9 @@ class TelegramMessageFetcher(MessageFetcher):
         logger.debug('Telegram message fetcher. `Fetch messages` finiished')
 
 
-    async def _fetch_dialog_messages(self, dialog: Dialog, chat_entity: Chat | Channel) -> None:
+    async def _fetch_dialog_messages(
+        self, dialog: Dialog, chat_entity: Chat | Channel
+    ) -> None:
         if not (dialog.is_channel or dialog.is_group):
             logger.debug(
                 "Telegram message fetcher. " \
@@ -96,7 +99,8 @@ class TelegramMessageFetcher(MessageFetcher):
                     if message.message:
                         sender = await self._client.get_entity(message.from_id)
                         await asyncio.sleep(0.1)
-                        if (hasattr(sender, 'bot') and (not sender.bot)):
+                        is_not_bot = hasattr(sender, 'bot') and (not sender.bot)
+                        if (not self._ignore_bots) or is_not_bot:
                             url = _get_msg_url(chat_entity, message)
                             await self._add_message_handler(0, 0, message.message, url)
                             max_msg_id = max(max_msg_id, message.id)

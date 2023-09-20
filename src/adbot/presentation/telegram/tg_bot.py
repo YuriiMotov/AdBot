@@ -14,7 +14,7 @@ from adbot.domain.services import AdBotServices
 from adbot.domain import exceptions as exc
 from . import bot_handlers
 from .dialogs import settings, help, errors
-from .filters import SenderId
+from .filters import ChatId
 from ..presentation_interface import PresentationInterface
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ class TGBot(PresentationInterface):
             bot_handlers.show_help, Command('help')
         )
         self._dp.message.register(
-            bot_handlers.stop_bot, and_f(Command('stop_bot'), SenderId(admin_id))
+            bot_handlers.stop_bot, and_f(Command('stop_bot'), ChatId(admin_id))
         )
 
         # Set error handlers

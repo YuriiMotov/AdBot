@@ -38,6 +38,8 @@ class AdBotServices():
         self._db_pool = db_pool
         self.messagebus = MessageBus()
         self._updated_uids = set()  # ids of users whose data were updated by _process_messages method
+        self._CHECK_IDLE_CYCLES = CHECK_IDLE_CYCLES
+        self._CHECK_IDLE_INTERVAL_SEC = CHECK_IDLE_INTERVAL_SEC
 
         # Set last_activity_dt for all users with menu_closed=False
         self._menu_activity_cache = {}  #cached data (menu_closed and laste_activity_dt)
@@ -471,6 +473,38 @@ class AdBotServices():
             self.messagebus.post_event(events.AdBotStop())
 
 
+    async def _loop_iter(self) -> None:
+        """
+            One iteration of main loop.
+            Processes messages (filter by users's keywords).
+            Generates `AdBotMessageForwardRequest` events to forward messages to users.
+            Checks users's inactivity state and generates `AdBotInactivityTimeout` to close menus of inactive users.
+            Generates `AdBotUserDataUpdated` events for users with opened menu whose data was updated.
+        """
+        counter = self._CHECK_IDLE_CYCLES
+        while (not self._stop) and (counter > 0):
+            logger.debug(f"Check idle timeouts")
+            await self._check_idle_timeouts()
+            await asyncio.sleep(self._CHECK_IDLE_INTERVAL_SEC)
+            counter -= 1
+
+        if  not self._stop:
+            logger.debug(f"Process messages")
+            try:
+                await self._process_messages()
+            except exc.AdBotExceptionSQL:
+                logger.error(f'Database error during processing messages')
+
+            logger.debug(f"Forward messages")
+            try:
+                await self._forward_messages()
+            except exc.AdBotExceptionSQL:
+                logger.error(f'Database error during forwarding messages')
+            
+            logger.debug(f"Forward messages")
+            await self._check_user_data_updated()
+
+
     async def _loop(self) -> None:
         """
             Processes messages (filter by users's keywords).
@@ -479,28 +513,7 @@ class AdBotServices():
             Generates `AdBotUserDataUpdated` events for users with opened menu whose data was updated.
         """
         while not self._stop:
-            counter = CHECK_IDLE_CYCLES
-            while (not self._stop) and (counter > 0):
-                logger.debug(f"Check idle timeouts")
-                await self._check_idle_timeouts()
-                await asyncio.sleep(CHECK_IDLE_INTERVAL_SEC)
-                counter -= 1
-
-            if  not self._stop:
-                logger.debug(f"Process messages")
-                try:
-                    await self._process_messages()
-                except exc.AdBotExceptionSQL:
-                    logger.error(f'Database error during processing messages')
-
-                logger.debug(f"Forward messages")
-                try:
-                    await self._forward_messages()
-                except exc.AdBotExceptionSQL:
-                    logger.error(f'Database error during forwarding messages')
-                
-                logger.debug(f"Forward messages")
-                await self._check_user_data_updated()
+            await self._loop_iter()
 
 
     async def stop(self) -> None:
