@@ -6,7 +6,6 @@ dotenv_path = '.env'
 class Settings(BaseSettings):
     MODE: str = 'DEPLOY'
     ADMIN_ID: int
-    TEST: int
     REDIS_DB: int
     BOT_TOKEN: SecretStr
     TESTBOT_NAME: str = ''
