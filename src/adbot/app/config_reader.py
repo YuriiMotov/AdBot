@@ -1,19 +1,20 @@
-import os
-
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
-start_path = os.path.dirname(__file__)
-dotenv_path = os.path.join(start_path, '.env')
+dotenv_path = '.env'
 
 class Settings(BaseSettings):
+    MODE: str = 'DEPLOY'
     ADMIN_ID: int
     TEST: int
     REDIS_DB: int
     BOT_TOKEN: SecretStr
+    TESTBOT_NAME: str = ''
+    CLIENT_ID: int = 0
     DB_DNS: str
     API_ID: int
     API_HASH: SecretStr
+    CHATS_FILTER: str = ''
     PHONE: str
 
     class Config:

@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from aiogram.types import Message, CallbackQuery
 from aiogram_dialog import (
@@ -8,28 +9,28 @@ from aiogram_dialog import (
 )
 from aiogram_dialog.widgets.kbd import Button
 
-from functions import bot_functions as bf
+from adbot.domain.services import AdBotServices
+from adbot.domain import models
 
 logger = logging.getLogger(__name__)
-
-
-class DBErrorException(Exception):
-    pass
 
 ERROR_MSG_FORMAT = '\n ⚠ Error occurred. {dialog_data[error_msg]} Try again later.'
 
 
-async def get_user_data(manager: DialogManager) -> bf.UserDict:
+async def get_user_data(
+        manager: DialogManager, ad_bot_srv: AdBotServices
+    ) -> Optional[models.User]:
     event = manager.event
     if hasattr(event, "from_user"):
-        return await bf.get_user(int(manager.event.from_user.id))
+        return await ad_bot_srv.get_user_by_telegram_id(int(manager.event.from_user.id))
     else:
-        logger.error(f'get_user_data, event class {event.__class__} doesn`t have attr "from_user"')
+        logger.error(
+            f'get_user_data, event class {event.__class__} ' \
+            'doesn`t have attr "from_user"'
+        )
 
 
-
-
-async def data_getter(dialog_manager: DialogManager, **kwargs):
+async def data_getter(dialog_manager: DialogManager, ad_bot_srv: AdBotServices, **kwargs):
     event = dialog_manager.event
 
     logger.debug(f'data_getter, event class {event.__class__}')
@@ -39,11 +40,9 @@ async def data_getter(dialog_manager: DialogManager, **kwargs):
     else:
         check_error_msg(dialog_manager)
 
-    user_data = await get_user_data(dialog_manager)
-    if user_data:
-        return {'user': user_data}
-    else:
-        raise DBErrorException()
+    user = await get_user_data(dialog_manager, ad_bot_srv)
+
+    return {'user': user}
     
 
 async def on_unexpected_input(
@@ -78,6 +77,8 @@ def check_error_msg(manager: DialogManager):
 async def on_menu_navigate_click(
         callback: CallbackQuery, button: Button, manager: DialogManager
 ):
-    logger.debug(f'on_menu_navigate_click, user={callback.from_user.id}, button={button.widget_id}')
-    await bf.reset_inactivity_timer(manager.event.from_user.id)
+    ad_bot_srv: AdBotServices = manager.middleware_data.get('ad_bot_srv')
+    user = await ad_bot_srv.get_user_by_telegram_id(callback.from_user.id)
+    logger.debug(f'on_menu_navigate_click, user={user.id}, button={button.widget_id}')
+    await ad_bot_srv.reset_inactivity_timer(user.id)
 
