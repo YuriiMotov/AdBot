@@ -167,3 +167,4 @@ telethon.session
 telethon.session-journal
 tmp.txt
 .vscode/settings.json
+.test.env

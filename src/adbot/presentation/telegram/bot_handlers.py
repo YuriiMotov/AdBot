@@ -69,7 +69,8 @@ async def dialog_close_cmd_handler(message: Message, dialog_manager: DialogManag
     logger.debug(f'`close_dialog` command, user={message.from_user.id}')
     dialog_manager.show_mode = ShowMode.EDIT
     try:
-        await dialog_manager.done()
+        if dialog_manager.has_context():
+            await dialog_manager.done()
     except NoContextError:
         pass
 

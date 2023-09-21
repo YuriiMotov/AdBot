@@ -1,12 +1,13 @@
 """
     To use these tests you have to:
+     - create .test.env file, wich pytest will use
      - create test bot
      - create test group and find out the id of that group (try to copy link of message
         from that group and look at the number in the link,
         i.e. http://t.me/c/111111/22.Here 111111 is a chat id)
      - add test bot to test group with the admin rights. Turn off the 'group privacy'
         option of the bot
-     - add to config:
+     - add to config (.test.env):
         - MODE='TEST'
         - CHATS_FILTER='test_chat_id'
         - TESTBOT_NAME='your_test_bot_name'

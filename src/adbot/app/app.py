@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import create_engine
@@ -27,7 +28,7 @@ class AdBotApp():
             self._ad_bot_services
         )
         self._scheduler = AsyncIOScheduler()
-        self._msg_fetcher: MessageFetcher = self._create_message_fetcher()
+        self._msg_fetcher: Optional[MessageFetcher] = self._create_message_fetcher()
 
     async def run(self):
         self._scheduler.start()
@@ -59,22 +60,27 @@ class AdBotApp():
         )
         return tg_bot
 
-    def _create_message_fetcher(self) -> MessageFetcher:
-        chats = None
-        if config.CHATS_FILTER != '':
-            chats = list(map(int, config.CHATS_FILTER.split(';')))
+    def _create_message_fetcher(self) -> Optional[MessageFetcher]:
 
-        tg_fetcher = TelegramMessageFetcher(
-            self._ad_bot_services.add_message, 
-            config.API_ID,
-            config.API_HASH.get_secret_value(),
-            chats_filter=chats
-        )
+        if config.MODE in ('DEPLOY', 'TEST'):
+            chats = None
+            if config.CHATS_FILTER != '':
+                chats = list(map(int, config.CHATS_FILTER.split(';')))
 
-        self._scheduler.add_job(
-            tg_fetcher.fetch_messages, 'interval', seconds=CHECK_NEW_MESSAGES_INTERVAL_SEC
-        )
+            tg_fetcher = TelegramMessageFetcher(
+                self._ad_bot_services.add_message, 
+                config.API_ID,
+                config.API_HASH.get_secret_value(),
+                chats_filter=chats
+            )
 
-        return tg_fetcher
+            self._scheduler.add_job(
+                tg_fetcher.fetch_messages, 'interval', seconds=CHECK_NEW_MESSAGES_INTERVAL_SEC
+            )
+
+            return tg_fetcher
+        else:
+            print(f'Message fetcher creation skipped. ({config.MODE=})')
+            return None
 
 
