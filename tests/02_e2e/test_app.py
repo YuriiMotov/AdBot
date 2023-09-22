@@ -21,16 +21,12 @@
 import asyncio
 import pytest
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from telethon import TelegramClient
-from telethon.tl.custom.conversation import Conversation
-from telethon.tl.custom.message import Message, MessageButton
 
 from adbot.domain import models
-
 from conftest import (
-    E2E_Env, client_send_to_bot, client_get_from_bot, client_send_to_test_chat,
+    E2E_Env, client_get_from_bot, client_send_to_test_chat,
     client_get_my_id
 )
 
@@ -53,7 +49,9 @@ async def test_full_msg_forwarding_cycle(e2e_env: E2E_Env):
     await ad_bot_srv.set_subscription_state(user.id, True)
     await ad_bot_srv.add_keyword(user.id, 'monitor')
 
-    await client_send_to_test_chat(e2e_env.client, e2e_env.test_chat_id, 'I`m selling the monitor HP')
+    await client_send_to_test_chat(
+        e2e_env.client, e2e_env.test_chat_id, 'I`m selling the monitor HP'
+    )
     await asyncio.sleep(0.5)
 
     await e2e_env.app.fetch_messages()
