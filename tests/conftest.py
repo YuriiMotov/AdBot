@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 import pytest
+import pytest_asyncio
 import random
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -10,9 +11,9 @@ from aiogram.types import Message
 from aiogram_dialog.test_tools import BotClient, MockMessageManager
 from telethon import TelegramClient
 from telethon.tl.types import User, Message as TelethonMessage
-from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession, create_async_engine
+from sqlalchemy.pool import QueuePool
 
 from adbot.domain import models
 from adbot.app.app import AdBotApp
@@ -22,23 +23,54 @@ from adbot.presentation.telegram.tg_bot import TGBot
 from adbot.presentation.telegram.filters import ChatName, SenderId
 
 
+async def _sessionmaker(url: str) -> async_sessionmaker:
+    engine = create_async_engine(
+        url, pool_pre_ping=True, poolclass=QueuePool,
+        pool_size=5,
+        max_overflow=-1, pool_timeout=0.5,
+        # isolation_level=''
+    )
 
-def _in_memory_db_sessionmaker():
-    engine = create_engine('sqlite:///:memory:', pool_pre_ping=True)
-    models.Base.metadata.drop_all(engine)
-    models.Base.metadata.create_all(engine)
-    db_pool = sessionmaker(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(models.Base.metadata.drop_all)
+        await conn.run_sync(models.Base.metadata.create_all)
+
+    db_pool = async_sessionmaker(
+        bind=engine, expire_on_commit=False
+    )
     return db_pool
 
 
-@pytest.fixture
-def in_memory_db_sessionmaker():
-    return _in_memory_db_sessionmaker()
+async def _in_memory_db_sessionmaker() -> async_sessionmaker:
+    return await _sessionmaker('sqlite+aiosqlite:///:memory:')
+
+@pytest_asyncio.fixture    
+async def file_db_sessionmaker() -> async_sessionmaker:
+    return await _sessionmaker('sqlite+aiosqlite:///tst_database.db')
+
+@pytest_asyncio.fixture
+async def in_memory_db_sessionmaker():
+    return await _in_memory_db_sessionmaker()
+
+@pytest_asyncio.fixture    
+async def config_url_sessionmaker() -> async_sessionmaker:
+    return await _sessionmaker(config.DB_DNS)
 
 
-@pytest.fixture
-def in_memory_adbot_srv(in_memory_db_sessionmaker):
-    adbot_srv = AdBotServices(in_memory_db_sessionmaker)
+
+@pytest_asyncio.fixture
+async def in_memory_adbot_srv(in_memory_db_sessionmaker):
+    adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
+    return adbot_srv
+
+@pytest_asyncio.fixture
+async def file_db_adbot_srv(file_db_sessionmaker):
+    adbot_srv = await AdBotServices(file_db_sessionmaker)
+    return adbot_srv
+
+@pytest_asyncio.fixture
+async def config_url_adbot_srv(config_url_sessionmaker):
+    adbot_srv = await AdBotServices(config_url_sessionmaker)
     return adbot_srv
 
 
@@ -102,8 +134,8 @@ async def echo_handler(message: Message, bot: Bot):
 
 
 class TestableAdBotSrv(AdBotServices):
-    def __init__(self, db_pool: sessionmaker):
-        super().__init__(db_pool)
+    def __ainit__(self, db_pool: async_sessionmaker):
+        super().__ainit__(db_pool)
         self._resume = False
 
     async def resume_loop(self): # method to resume the loop
@@ -120,8 +152,8 @@ class TestableAdBotSrv(AdBotServices):
 
 
 class TestableApp(AdBotApp):
-    def __init__(self, client_tg_id: int):
-        super().__init__()
+    def __ainit__(self, client_tg_id: int):
+        super().__ainit__()
         self._ad_bot_services: TestableAdBotSrv
         self._scheduler.remove_all_jobs()
         self._msg_fetcher._ignore_bots = False
@@ -130,11 +162,11 @@ class TestableApp(AdBotApp):
             echo_handler, SenderId(client_tg_id)
         )
 
-    def _db_connect(self) -> sessionmaker:
-        return _in_memory_db_sessionmaker()
+    async def _db_connect(self) -> async_sessionmaker:
+        return await _in_memory_db_sessionmaker()
 
-    def _create_ad_bot_services(self, db_pool: sessionmaker) -> TestableAdBotSrv:
-        ad_bot_srv = TestableAdBotSrv(db_pool)
+    async def _create_ad_bot_services(self, db_pool: async_sessionmaker) -> TestableAdBotSrv:
+        ad_bot_srv = await TestableAdBotSrv(db_pool)
         ad_bot_srv._CHECK_IDLE_CYCLES = 1
         ad_bot_srv._CHECK_IDLE_INTERVAL_SEC = 1
         return ad_bot_srv
@@ -159,7 +191,7 @@ def e2e_confirmation():
 
 
 @pytest.fixture()
-def e2e_env(e2e_confirmation) -> E2E_Env:
+async def e2e_env(e2e_confirmation) -> E2E_Env:
     assert config.MODE == 'TEST'
     assert config.CHATS_FILTER != ''
     assert len(config.CHATS_FILTER.split(';')) == 1
@@ -169,7 +201,7 @@ def e2e_env(e2e_confirmation) -> E2E_Env:
     e.test_chat_id = int(config.CHATS_FILTER.split(';')[0])
     e.client_id = config.CLIENT_ID
     e.bot_name = config.TESTBOT_NAME
-    e.app = TestableApp(e.client_id)
+    e.app = await TestableApp(e.client_id)
     e.client = e.app._msg_fetcher._client
     
     yield e 
@@ -182,7 +214,7 @@ def mock_method_raise_SQLAlchemyError(*arg, **kwarg):
     raise SQLAlchemyError()
 
 
-def brake_sessionmaker(db_pool: sessionmaker):
+def brake_sessionmaker(db_pool: async_sessionmaker):
     def broken_session_maker():
         session = db_pool()
         session.commit = mock_method_raise_SQLAlchemyError
@@ -192,7 +224,6 @@ def brake_sessionmaker(db_pool: sessionmaker):
         return session
 
     return broken_session_maker
-
 
 
 async def client_send_to_bot(client: TelegramClient, bot_name: str, msg: str):

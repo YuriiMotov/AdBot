@@ -59,7 +59,7 @@ class Keyword(Base):
     __tablename__ = "keyword"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    word: Mapped[str] = mapped_column(Unicode(50))
+    word: Mapped[str] = mapped_column(Unicode(50), unique=True)
 
     users: Mapped[List[User]] = relationship(
         secondary=user_keyword_link, back_populates="keywords"

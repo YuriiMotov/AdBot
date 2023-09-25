@@ -12,6 +12,8 @@
         - CHATS_FILTER='test_chat_id'
         - TESTBOT_NAME='your_test_bot_name'
         - CLIENT_ID=123321123
+     - During the test you will be asked to confirm that no other copy of telethon client
+        started (with the same account). You should check and type 'y'.
     
     If you don't know your client user id, just run tests, they will fail and you can see
     the right client id in the error message.

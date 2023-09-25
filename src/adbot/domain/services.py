@@ -1,22 +1,22 @@
 import asyncio
-from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from hashlib import md5
 import logging
-from typing import Optional, TypeAlias, Union
+from typing import Optional
+import random
 
-from sqlalchemy.orm import Session, sessionmaker, load_only, with_expression, selectinload
+from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.orm import load_only, with_expression, selectinload
+
 from sqlalchemy import select, func
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError, OperationalError, TimeoutError
 
+from ..common.async_mixin import AsyncMixin
 from .messagebus import MessageBus
 from . import events
 from . import models
 from . import exceptions as exc
 
-
-# UserDict: TypeAlias = dict[str, Union[bool, str, int, float, list[int | str]]]
-# ForwardFunc: TypeAlias = Callable[[int, str], Awaitable[bool]]
 
 IDLE_TIMEOUT_MINUTES = 2
 CHECK_IDLE_CYCLES = 10
@@ -26,9 +26,18 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class AdBotServices():
+class AdBotServices(AsyncMixin):
 
-    def __init__(self, db_pool: sessionmaker):
+    def __init__(self, db_pool: async_sessionmaker):
+        """
+            Object initialisation implemented in __ainit__().
+            To initialise object it has to be awaited after creation
+            (o = await AdBotServices(db_pool)).
+        """
+        super().__init__(db_pool)
+
+
+    async def __ainit__(self, db_pool: async_sessionmaker):
         """
             Initializes object, preload data from DB into cache (menu_closed states).
             Raises `AdBotExceptionSQL` exception on DB error.
@@ -45,8 +54,9 @@ class AdBotServices():
         self._menu_activity_cache = {}  #cached data (menu_closed and laste_activity_dt)
         st = select(models.User.id).where(models.User.menu_closed == False)
         try:
-            with self._db_pool() as session:
-                for user_id in session.scalars(st).all():
+            async with self._db_pool() as session:
+                session: AsyncSession
+                for user_id in (await session.scalars(st)).all():
                     self._menu_activity_cache[user_id] = {
                         'menu_closed': False,
                         'act_dt': datetime.now()
@@ -60,13 +70,13 @@ class AdBotServices():
         logger.error(f'Exception {error.__class__} {error}')
 
 
-    def _get_user_by_id(self, session: Session, user_id: int) -> models.User:
+    async def _get_user_by_id(self, session: AsyncSession, user_id: int) -> models.User:
         """
             Returns `user` object by primary key `id`.
             Gets `session` as a parameter.
             Raises:
                 `AdBotExceptionUserNotExist` if user doesn't exist
-                `AdBotExceptionSQL` exception on DB error
+                `SQLAlchemyError` exception on DB error
         """
         st = select(models.User) \
                 .outerjoin_from(models.User, models.user_message_link).group_by(models.User.id) \
@@ -78,14 +88,10 @@ class AdBotServices():
                         func.count(models.user_message_link.c.user_id)
                     )
                 )
-        try:
-            user = session.scalar(st)
-            if user is not None:
-                return user
-            raise exc.AdBotExceptionUserNotExist(f"User with id={user_id} doesn`t exist")
-        except SQLAlchemyError as e:
-            self._db_error_handle(e)
-            raise exc.AdBotExceptionSQL("SQLAlchemyError")
+        user = await session.scalar(st)
+        if user is not None:
+            return user
+        raise exc.AdBotExceptionUserNotExist(f"User with id={user_id} doesn`t exist")
 
 
     async def get_user_by_id(self, user_id: int) -> models.User:
@@ -96,8 +102,9 @@ class AdBotServices():
                 `AdBotExceptionSQL` exception on DB error
         """
         try:
-            with self._db_pool() as session:
-                return self._get_user_by_id(session, user_id)
+            async with self._db_pool() as session:
+                session: AsyncSession
+                return await self._get_user_by_id(session, user_id)
         except SQLAlchemyError as e:
             self._db_error_handle(e)
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
@@ -111,7 +118,8 @@ class AdBotServices():
                 `AdBotExceptionSQL` exception on DB error
         """
         try:
-            with self._db_pool() as session:
+            async with self._db_pool() as session:
+                session: AsyncSession
                 st = select(models.User) \
                         .outerjoin_from(models.User, models.user_message_link).group_by(models.User.id) \
                         .where(models.User.telegram_id == telegram_id) \
@@ -122,7 +130,7 @@ class AdBotServices():
                                 func.count(models.user_message_link.c.user_id)
                             )
                         )
-                user = session.scalar(st)
+                user = await session.scalar(st)
                 if user is not None:
                     return user
                 raise exc.AdBotExceptionUserNotExist(
@@ -140,22 +148,24 @@ class AdBotServices():
             Raises `AdBotExceptionSQL` exception on DB error.
         """
         try:
-            with self._db_pool() as session:
+            async with self._db_pool() as session:
+                session: AsyncSession
                 user = models.User()
                 user.telegram_id = telegram_id
                 user.telegram_name = telegram_name
                 user.forwarding_state = True
                 user.forward_queue_len = 0
                 session.add(user)
-                session.commit()
+                await session.commit()
         except SQLAlchemyError as e:
             self._db_error_handle(e)
-            raise exc.AdBotExceptionSQL("SQLAlchemyError")
-        
+            raise exc.AdBotExceptionSQL(f"SQLAlchemyError ({e})")
+
         try:
             return await self.get_user_by_telegram_id(telegram_id)
-        except exc.AdBotExceptionUserNotExist:
-            raise exc.AdBotExceptionSQL("SQLAlchemyError")
+        except exc.AdBotExceptionUserNotExist as e:
+            raise exc.AdBotExceptionSQL(f"SQLAlchemyError ({e})")
+
 
     async def get_or_create_user_by_telegram_data(
             self, telegram_id: int, telegram_name: str
@@ -172,7 +182,6 @@ class AdBotServices():
             return await self.create_user_by_telegram_data(telegram_id, telegram_name)
 
 
-
     # Subscription management
 
     async def set_subscription_state(self, user_id: int, new_state: bool) -> None:
@@ -185,10 +194,11 @@ class AdBotServices():
                 `AdBotExceptionSQL` exception on DB error
         """
         try:
-            with self._db_pool() as session:
-                user = self._get_user_by_id(session, user_id)
+            async with self._db_pool() as session:
+                session: AsyncSession
+                user = await self._get_user_by_id(session, user_id)
                 user.subscription_state = new_state
-                session.commit()
+                await session.commit()
         except SQLAlchemyError as e:
             self._db_error_handle(e)
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
@@ -206,10 +216,11 @@ class AdBotServices():
                 `AdBotExceptionSQL` exception on DB error
         """
         try:
-            with self._db_pool() as session:
-                user = self._get_user_by_id(session, user_id)
+            async with self._db_pool() as session:
+                session: AsyncSession
+                user = await self._get_user_by_id(session, user_id)
                 user.forwarding_state = new_state
-                session.commit()
+                await session.commit()
         except SQLAlchemyError as e:
             self._db_error_handle(e)
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
@@ -227,10 +238,11 @@ class AdBotServices():
                 `AdBotExceptionSQL` exception on DB error
         """
         try:
-            with self._db_pool() as session:
-                user = self._get_user_by_id(session, user_id)
+            async with self._db_pool() as session:
+                session: AsyncSession
+                user = await self._get_user_by_id(session, user_id)
                 user.menu_closed = new_state
-                session.commit()
+                await session.commit()
         except SQLAlchemyError as e:
             self._db_error_handle(e)
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
@@ -285,19 +297,30 @@ class AdBotServices():
                 `AdBotExceptionUserNotExist` if user doesn`t exist
                 `AdBotExceptionSQL` exception on DB error
         """
+        retries = 5
         try:
-            with self._db_pool() as session:
-                user = self._get_user_by_id(session, user_id)
-                kw = session.scalar(select(models.Keyword).where(models.Keyword.word == keyword))
-                if kw is None:
-                    kw = models.Keyword(word=keyword)
-                if kw not in user.keywords:
-                    user.keywords.append(kw)
-                session.commit()
-            return True
+            while retries:
+                retries -= 1
+                try:
+                    async with self._db_pool() as session:
+                        session: AsyncSession
+                        user = await self._get_user_by_id(session, user_id)
+                        kw = await session.scalar(select(models.Keyword).where(models.Keyword.word == keyword))
+                        if (kw is None):
+                            kw = models.Keyword(word=keyword)
+                        if kw not in user.keywords:
+                            user.keywords.append(kw)
+                        await session.commit()
+                    return True
+
+                except (IntegrityError, OperationalError):
+                    await asyncio.sleep(1 / random.randint(100, 1000))
+
+            raise exc.AdBotExceptionSQL("max retries")
+
         except SQLAlchemyError as e:
             self._db_error_handle(e)
-            raise exc.AdBotExceptionSQL("SQLAlchemyError")
+            raise exc.AdBotExceptionSQL(f"SQLAlchemyError ({e})")
 
 
     async def remove_keyword(self, user_id: int, keyword: str) -> bool:
@@ -310,13 +333,14 @@ class AdBotServices():
                 `AdBotExceptionSQL` exception on DB error
         """
         try:
-            with self._db_pool() as session:
-                user = self._get_user_by_id(session, user_id)
-                kw = session.scalar(select(models.Keyword).where(models.Keyword.word == keyword))
+            async with self._db_pool() as session:
+                session: AsyncSession
+                user = await self._get_user_by_id(session, user_id)
+                kw = await session.scalar(select(models.Keyword).where(models.Keyword.word == keyword))
                 if kw:
                     if kw in user.keywords:
                         user.keywords.remove(kw)
-                    session.commit()
+                    await session.commit()
             return True
         except SQLAlchemyError as e:
             self._db_error_handle(e)
@@ -333,7 +357,8 @@ class AdBotServices():
                 `AdBotExceptionSQL` exception on DB error
         """
         try:
-            with self._db_pool() as session:
+            async with self._db_pool() as session:
+                session: AsyncSession
                 msg = models.GroupChatMessage(
                     source_id=source_id,
                     cat_id=cat_id,
@@ -342,7 +367,7 @@ class AdBotServices():
                     text_hash=md5(msg_text.encode('utf-8'), usedforsecurity=False).hexdigest()
                 )
                 session.add(msg)
-                session.commit()
+                await session.commit()
             return True
         except SQLAlchemyError as e:
             self._db_error_handle(e)
@@ -357,26 +382,35 @@ class AdBotServices():
                 `AdBotExceptionSQL` exception on DB error  
         """
         try:
-            with self._db_pool() as session:
+            async with self._db_pool() as session:
+                session: AsyncSession
                 keywords = await self._get_all_keywords(session)
-                st = select(models.GroupChatMessage).where(models.GroupChatMessage.processed == False)
-                msgs = session.scalars(st).all()
+                st = select(models.GroupChatMessage) \
+                    .where(models.GroupChatMessage.processed == False) \
+                    .options(selectinload(models.GroupChatMessage.users))
+                msgs = (await session.scalars(st)).all()
                 for msg in msgs:
                     msg_text = msg.text.lower()
                     for kw, user_ids in keywords.items():
                         if kw in msg_text:
                             for user_id in user_ids:
-                                user = session.get(models.User, user_id)
-                                user.forward_queue.append(msg)
+                                user = await session.get(
+                                    models.User, user_id,
+                                    # options=[
+                                    #     selectinload(models.User.forward_queue)
+                                    # ]
+                                )
+                                # user.forward_queue.append(msg)
+                                msg.users.append(user)
                                 self._updated_uids.add(user.id)
                     msg.processed = True
-                session.commit()
+                await session.commit()
         except SQLAlchemyError as e:
             self._db_error_handle(e)
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
 
 
-    async def _get_all_keywords(self, session: Session) -> Optional[dict]:
+    async def _get_all_keywords(self, session: AsyncSession) -> Optional[dict]:
         """
             Creates total list of all keywords of users with `subscription state`=True.
             Returns dict of keywords, where key is keyword and value is list of users ids.
@@ -391,10 +425,10 @@ class AdBotServices():
                     .where(models.User.subscription_state == True) \
                     .group_by(models.Keyword.id) \
                     .options(
-                        selectinload(models.Keyword.users).options(load_only(models.User.id))
+                        selectinload(models.Keyword.users).options(load_only(models.User.id, models.User.subscription_state))
                     )
 
-            for kw in session.scalars(st).all():
+            for kw in (await session.scalars(st)).all():
                 self._keywords_cache[kw.word] = [user.id for user in kw.users if user.subscription_state]
 
         return self._keywords_cache     # Success
@@ -409,11 +443,12 @@ class AdBotServices():
                 SQLAlchemyError on DB error
         """
         try:
-            with self._db_pool() as session:
+            async with self._db_pool() as session:
+                session: AsyncSession
                 st = select(models.User) \
                     .where(models.User.forwarding_state == True) \
                     .options(selectinload(models.User.forward_queue))
-                users = session.scalars(st).all()
+                users = (await session.scalars(st)).all()
                 for user in users:
                     for msg in list(user.forward_queue):
                         if user.menu_closed == True:
@@ -425,7 +460,7 @@ class AdBotServices():
                             )
                             self.messagebus.post_event(event)
                             user.forward_queue.remove(msg)
-                session.commit()
+                await session.commit()
         except SQLAlchemyError as e:
             self._db_error_handle(e)
             raise exc.AdBotExceptionSQL("SQLAlchemyError")

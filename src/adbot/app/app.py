@@ -4,7 +4,9 @@ from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import sessionmaker
+
 
 from adbot.domain.events import AdBotStop
 from adbot.domain.services import AdBotServices
@@ -13,17 +15,26 @@ from adbot.presentation.presentation_interface import PresentationInterface
 from adbot.message_fetcher.telegram.telegram_fetcher import TelegramMessageFetcher
 from adbot.message_fetcher.interface import MessageFetcher
 from .config_reader import config
+from ..common.async_mixin import AsyncMixin
 
 logger = logging.getLogger(__name__)
 
-CHECK_NEW_MESSAGES_INTERVAL_SEC = 30
+CHECK_NEW_MESSAGES_INTERVAL_SEC = 200
 
 
-class AdBotApp():
+class AdBotApp(AsyncMixin):
 
-    def __init__(self) -> None:
-        db_pool = self._db_connect()
-        self._ad_bot_services: AdBotServices = self._create_ad_bot_services(db_pool)
+    def __init__(self):
+        """
+            Object initialisation implemented in __ainit__().
+            To initialise object it has to be awaited after creation
+            (o = await AdBotApp()).
+        """
+        super().__init__()
+
+    async def __ainit__(self) -> None:
+        db_pool = await self._db_connect()
+        self._ad_bot_services: AdBotServices = await self._create_ad_bot_services(db_pool)
         self._presentation: PresentationInterface = self._create_tg_bot(
             self._ad_bot_services
         )
@@ -44,12 +55,12 @@ class AdBotApp():
         self._scheduler.shutdown()
 
 
-    def _db_connect(self) -> sessionmaker:
-        engine = create_engine(config.DB_DNS, pool_pre_ping=True)
-        return sessionmaker(bind=engine)
+    async def _db_connect(self) -> sessionmaker:
+        engine = create_async_engine(config.DB_DNS, pool_pre_ping=True)
+        return async_sessionmaker(bind=engine, expire_on_commit=False)
 
-    def _create_ad_bot_services(self, db_pool: sessionmaker) -> AdBotServices:
-        return AdBotServices(db_pool)
+    async def _create_ad_bot_services(self, db_pool: sessionmaker) -> AdBotServices:
+        return await AdBotServices(db_pool)
 
     def _create_tg_bot(self, ad_bot_services: AdBotServices) -> PresentationInterface:
         tg_bot = TGBot(

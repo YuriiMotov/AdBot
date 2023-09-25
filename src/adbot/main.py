@@ -4,7 +4,7 @@ from adbot.app.app import AdBotApp
 
 
 async def main():
-    app = AdBotApp()
+    app = await AdBotApp()
     await app.run()
 
 

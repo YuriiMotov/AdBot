@@ -3,8 +3,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from sqlalchemy import select, text
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from adbot.domain.services import AdBotServices, exc, IDLE_TIMEOUT_MINUTES
 from adbot.domain import models
@@ -16,15 +15,16 @@ from conftest import brake_sessionmaker
 # ==============================================================================================
 # __init__
 
-def test_adbot_init(in_memory_db_sessionmaker):
-    adbot_srv = AdBotServices(in_memory_db_sessionmaker)
+@pytest.mark.asyncio
+async def test_adbot_init(in_memory_db_sessionmaker):
+    adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
 
-
-def test_adbot_init_raises_exception_on_sql_error(in_memory_db_sessionmaker):
+@pytest.mark.asyncio
+async def test_adbot_init_raises_exception_on_sql_error(in_memory_db_sessionmaker):
     db_pool_broken = brake_sessionmaker(in_memory_db_sessionmaker)
 
     with pytest.raises(exc.AdBotExceptionSQL):
-        adbot_srv = AdBotServices(db_pool_broken)
+        adbot_srv = await AdBotServices(db_pool_broken)
 
 
 # ==============================================================================================
@@ -307,14 +307,15 @@ async def test_set_menu_closed_state_raises_exception_on_sql_error(in_memory_adb
 
 @pytest.mark.asyncio
 async def test_onload_set_last_activity_dt_for_users_with_opened_menu(in_memory_db_sessionmaker):
-    with in_memory_db_sessionmaker() as session:
-        session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 1)'))
-        session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (222222, 0)'))
-        session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (333333, 1)'))
-        session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (444444, 0)'))
-        session.commit()
+    async with in_memory_db_sessionmaker() as session:
+        session: AsyncSession
+        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 1)'))
+        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (222222, 0)'))
+        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (333333, 1)'))
+        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (444444, 0)'))
+        await session.commit()
 
-    adbot_srv = AdBotServices(in_memory_db_sessionmaker)
+    adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
 
     user_ids = [2, 4]
     user_ids_set = set(user_ids)
@@ -332,28 +333,31 @@ async def test_onload_set_last_activity_dt_for_users_with_opened_menu(in_memory_
 
 @pytest.mark.asyncio
 async def test_get_is_idle_default_false(in_memory_db_sessionmaker):
-    with in_memory_db_sessionmaker() as session:
-        session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 1)'))
-        session.commit()
-    adbot_srv = AdBotServices(in_memory_db_sessionmaker)
+    async with in_memory_db_sessionmaker() as session:
+        session: AsyncSession
+        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 1)'))
+        await session.commit()
+    adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
     assert (await adbot_srv.get_is_idle_with_opened_menu(1)) == False
 
 
 @pytest.mark.asyncio
 async def test_get_is_idle_onload_on_user_with_opened_menu_returns_false(in_memory_db_sessionmaker):
-    with in_memory_db_sessionmaker() as session:
-        session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
-        session.commit()
-    adbot_srv = AdBotServices(in_memory_db_sessionmaker)
+    async with in_memory_db_sessionmaker() as session:
+        session: AsyncSession
+        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
+        await session.commit()
+    adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
     assert (await adbot_srv.get_is_idle_with_opened_menu(1)) == False
 
 
 @pytest.mark.asyncio
 async def test_get_is_idle_on_user_with_timeout_more_when_limit_returns_true(in_memory_db_sessionmaker):
-    with in_memory_db_sessionmaker() as session:
-        session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
-        session.commit()
-    adbot_srv = AdBotServices(in_memory_db_sessionmaker)
+    async with in_memory_db_sessionmaker() as session:
+        session: AsyncSession
+        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
+        await session.commit()
+    adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
 
     idle_point = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
     adbot_srv._menu_activity_cache[1]['act_dt'] = idle_point
@@ -362,10 +366,11 @@ async def test_get_is_idle_on_user_with_timeout_more_when_limit_returns_true(in_
 
 @pytest.mark.asyncio
 async def test_get_is_idle_on_user_with_timeout_less_when_limit_returns_false(in_memory_db_sessionmaker):
-    with in_memory_db_sessionmaker() as session:
-        session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
-        session.commit()
-    adbot_srv = AdBotServices(in_memory_db_sessionmaker)
+    async with in_memory_db_sessionmaker() as session:
+        session: AsyncSession
+        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
+        await session.commit()
+    adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
 
     idle_point = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
     adbot_srv._menu_activity_cache[1]['act_dt'] = idle_point + timedelta(seconds=1)
@@ -374,10 +379,11 @@ async def test_get_is_idle_on_user_with_timeout_less_when_limit_returns_false(in
 
 @pytest.mark.asyncio
 async def test_get_reset_inactivity_timer(in_memory_db_sessionmaker):
-    with in_memory_db_sessionmaker() as session:
-        session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
-        session.commit()
-    adbot_srv = AdBotServices(in_memory_db_sessionmaker)
+    async with in_memory_db_sessionmaker() as session:
+        session: AsyncSession
+        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
+        await session.commit()
+    adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
 
     idle_point = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
     adbot_srv._menu_activity_cache[1]['act_dt'] = idle_point
@@ -389,10 +395,11 @@ async def test_get_reset_inactivity_timer(in_memory_db_sessionmaker):
 
 @pytest.mark.asyncio
 async def test_get_is_idle_on_user_with_timeout_more_when_limit_and_closed_menu_returns_false(in_memory_db_sessionmaker):
-    with in_memory_db_sessionmaker() as session:
-        session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
-        session.commit()
-    adbot_srv = AdBotServices(in_memory_db_sessionmaker)
+    async with in_memory_db_sessionmaker() as session:
+        session: AsyncSession
+        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
+        await session.commit()
+    adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
     idle_point = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
     adbot_srv._menu_activity_cache[1]['act_dt'] = idle_point
     await adbot_srv.set_menu_closed_state(1, True)
@@ -533,7 +540,8 @@ async def test_get_all_keywords_one_user(in_memory_adbot_srv: AdBotServices):
     await adbot_srv.add_keyword(user.id, 'sofa')
 
     keywords= None
-    with adbot_srv._db_pool() as session:
+    async with adbot_srv._db_pool() as session:
+        session: AsyncSession
         keywords = await adbot_srv._get_all_keywords(session)
 
     assert keywords is not None
@@ -560,7 +568,8 @@ async def test_get_all_keywords_two_users(in_memory_adbot_srv: AdBotServices):
     await adbot_srv.add_keyword(user.id, 'pen')
 
     keywords= None
-    with adbot_srv._db_pool() as session:
+    async with adbot_srv._db_pool() as session:
+        session: AsyncSession
         keywords = await adbot_srv._get_all_keywords(session)
 
     assert keywords is not None
@@ -599,7 +608,8 @@ async def test_get_all_keywords_subscription_on_off(in_memory_adbot_srv: AdBotSe
     await adbot_srv.add_keyword(user3.id, 'bicycle')
 
     keywords= None
-    with adbot_srv._db_pool() as session:
+    async with adbot_srv._db_pool() as session:
+        session: AsyncSession
         keywords = await adbot_srv._get_all_keywords(session)
 
     assert keywords is not None
@@ -619,7 +629,8 @@ async def test_get_all_keywords_subscription_on_off(in_memory_adbot_srv: AdBotSe
     # Set subscription state of user2 to False. His keywords should be excluded
     await adbot_srv.set_subscription_state(user2.id, False)
     keywords= None
-    with adbot_srv._db_pool() as session:
+    async with adbot_srv._db_pool() as session:
+        session: AsyncSession
         keywords = await adbot_srv._get_all_keywords(session)
 
     assert keywords is not None
@@ -648,9 +659,10 @@ async def test_add_message(in_memory_adbot_srv: AdBotServices):
     assert res == True
 
     messages = None
-    session: Session
-    with adbot_srv._db_pool() as session:
-        messages = session.scalars(select(models.GroupChatMessage)).all()
+    session: AsyncSession
+    async with adbot_srv._db_pool() as session:
+        session: AsyncSession
+        messages = (await session.scalars(select(models.GroupChatMessage))).all()
     
     assert messages is not None
     assert len(messages) == 1
@@ -670,6 +682,31 @@ async def test_add_message_raise_exception_on_sql_error(in_memory_adbot_srv: AdB
     adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)    # broken DB returns SQLAlchemyError on every query and commit
     with pytest.raises(exc.AdBotExceptionSQL):
         await adbot_srv.add_message(11, 22, 'message_text', 'https://t.me/c/123/456')
+
+
+@pytest.mark.asyncio
+async def test_get_all_keywords(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    res = await adbot_srv.add_message(11, 22, 'apple banana orange', 'https://t.me/c/123/456')
+    res = await adbot_srv.add_message(12, 23, 'car bicycle scooter', 'https://t.me/c/456/789')
+    res = await adbot_srv.add_message(13, 24, 'pen pencil brush', 'https://t.me/c/789/012')
+    res = await adbot_srv.add_message(14, 25, 'chair table sofa', 'https://t.me/c/012/345')
+
+    user = await adbot_srv.create_user_by_telegram_data(11111, 'asd')
+    await adbot_srv.set_subscription_state(user.id, True)
+
+    res = await adbot_srv.add_keyword(user.id, 'apple')
+    res = await adbot_srv.add_keyword(user.id, 'scooter')
+    res = await adbot_srv.add_keyword(user.id, 'sofa')
+
+    keywords = None
+    async with adbot_srv._db_pool() as session:
+        session: AsyncSession
+        keywords = await adbot_srv._get_all_keywords(session)
+
+    assert keywords is not None
+    assert len(keywords) == 3
 
 
 @pytest.mark.asyncio
@@ -693,8 +730,9 @@ async def test_process_messages_one_user(in_memory_adbot_srv: AdBotServices):
 
     # check `processed`=1
     res = None
-    with adbot_srv._db_pool() as session:
-        res = session.execute(text(f"SELECT processed FROM chat_message")).all()
+    async with adbot_srv._db_pool() as session:
+        session: AsyncSession
+        res = (await session.execute(text(f"SELECT processed FROM chat_message"))).all()
     assert res is not None
     assert len(res) == 4
     assert res[0][0] == 1
@@ -704,8 +742,9 @@ async def test_process_messages_one_user(in_memory_adbot_srv: AdBotServices):
 
     # Check messages are prepeared for forwarding
     res = None
-    with adbot_srv._db_pool() as session:
-        res = session.execute(text(f"SELECT user_id, message_id FROM user_message_link")).all()
+    async with adbot_srv._db_pool() as session:
+        session: AsyncSession
+        res = (await session.execute(text(f"SELECT user_id, message_id FROM user_message_link"))).all()
 
     msg_ids = [1, 2, 4]
     assert res is not None
@@ -911,7 +950,6 @@ async def test_inactivity_timeouts_none_when_user_active_2(in_memory_adbot_srv: 
     await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
 
     assert len(catched_events) == 0
-    
 
 
 @pytest.mark.asyncio
@@ -1138,7 +1176,6 @@ async def test_main_cycle_state_runned_after_run_cmd(in_memory_adbot_srv: AdBotS
     await adbot_srv.stop()
     task.cancel()
     await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
-
 
 
 @pytest.mark.asyncio

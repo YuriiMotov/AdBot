@@ -5,7 +5,8 @@ from unittest.mock import AsyncMock, patch
 
 from aiogram_dialog.test_tools.keyboard import InlineButtonTextLocator
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from adbot.domain import models
 from adbot.domain.services import IDLE_TIMEOUT_MINUTES
@@ -39,8 +40,9 @@ async def test_second_start_cmd_doesnt_create_duplicate_of_user(env: Env):
     user = await env.ad_bot_srv.get_user_by_telegram_id(env.client.user.id)
     assert user.telegram_id == env.client.user.id
 
-    with env.ad_bot_srv._db_pool() as session:
-        users = session.scalars(select(models.User)).all()
+    async with env.ad_bot_srv._db_pool() as session:
+        session: AsyncSession
+        users = (await session.scalars(select(models.User))).all()
    
     assert len(users) == 1
 
@@ -312,8 +314,9 @@ async def test_add_keyword_shows_error_msg_on_sql_error(env: Env):
 @pytest.mark.asyncio
 async def test_show_in_menu_number_of_messages_in_the_queue(env: Env):
     # Create user, message and add message to user's queue
-    session: Session
-    with env.ad_bot_srv._db_pool() as session:
+
+    async with env.ad_bot_srv._db_pool() as session:
+        session: AsyncSession
         user = models.User(telegram_id = env.client.user.id)
         msg = models.GroupChatMessage(
             source_id = 0,
@@ -322,9 +325,9 @@ async def test_show_in_menu_number_of_messages_in_the_queue(env: Env):
             url = 'https://t.me',
             text_hash = ''
         )
-        session.add(user)
         user.forward_queue.append(msg)
-        session.commit()
+        session.add(user)
+        await session.commit()
 
     # Open menu and check
     await env.client.send('/menu')
@@ -336,8 +339,8 @@ async def test_show_in_menu_number_of_messages_in_the_queue(env: Env):
 async def test_MessageForwardRequest_event_handler_sends_message(env: Env):
     msg_url = 'https://t.me'
     # Create user, message and add message to user's queue
-    session: Session
-    with env.ad_bot_srv._db_pool() as session:
+    async with env.ad_bot_srv._db_pool() as session:
+        session: AsyncSession
         user = models.User(telegram_id = env.client.user.id)
         user.forwarding_state = True
         msg = models.GroupChatMessage(
@@ -347,9 +350,9 @@ async def test_MessageForwardRequest_event_handler_sends_message(env: Env):
             url = msg_url,
             text_hash = ''
         )
-        session.add(user)
         user.forward_queue.append(msg)
-        session.commit()
+        session.add(user)
+        await session.commit()
     
     # Call AdBotServices._forward_messages method to generate MessageForwardRequest events
     # And check that Bot.send() was called
@@ -371,10 +374,17 @@ async def test_InactivityTimeout_event_handler_sends_closedialog_cmd(env: Env):
     idle_point = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES*2)
     env.ad_bot_srv._menu_activity_cache[user.id]['act_dt'] = idle_point
 
+
+    assert (await env.ad_bot_srv.get_is_idle_with_opened_menu(user.id)) == True
+
+
     # Call AdBotServices._check_idle_timeouts to generate MessageForwardRequest events
     # And check that TgBot._send_bot_cmd method was called
     await env.ad_bot_srv._check_idle_timeouts()
-    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    await asyncio.sleep(0.1)     # Give time to process asyncio tasks
+                                  # (more, because of async DB IO)
+
     env.tg_bot._send_bot_cmd.assert_awaited_once_with(
         '/close_dialog', env.client.user.id
     )
@@ -417,28 +427,15 @@ async def test_closedialog_cmd_does_nothing_when_menu_is_closed(env: Env):
 async def test_UserDataUpdated_event_handler_sends_refreshdialog_cmd(env: Env):
     # Open menu, change user data
     await env.client.send('/menu')
-    session: Session
-    user_id = None
-    with env.ad_bot_srv._db_pool() as session:
-        user = session.scalar(
-            select(models.User).where(models.User.telegram_id == env.client.user.id)
-        )
-        user_id = user.id
-        msg = models.GroupChatMessage(
-            source_id = 0,
-            cat_id = 0, 
-            text = 'some text',
-            url = 'https://t.me',
-            text_hash = ''
-        )
-        user.forward_queue.append(msg)
-        session.commit()
-    
+    user = await env.ad_bot_srv.get_user_by_telegram_id(env.client.user.id)
+
     # Imitate DataUpdated event, check whether the TgBot._send_bot_cmd method was called
     env.ad_bot_srv.messagebus.post_event(
-        events.AdBotUserDataUpdated(user_id)
+        events.AdBotUserDataUpdated(user.id)
     )
-    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+    await asyncio.sleep(0.1)     # Give time to process asyncio tasks
+                                  # (more, because of async DB IO)
+
     env.tg_bot._send_bot_cmd.assert_awaited_once_with(
         '/refresh_dialog', env.client.user.id
     )
@@ -448,10 +445,11 @@ async def test_UserDataUpdated_event_handler_sends_refreshdialog_cmd(env: Env):
 async def test_refreshdialog_cmd_updates_data_in_window(env: Env):
     # Open menu, change user data, imitate refresh_dialog cmd
     await env.client.send('/menu')
-    session: Session
-    with env.ad_bot_srv._db_pool() as session:
-        user = session.scalar(
-            select(models.User).where(models.User.telegram_id == env.client.user.id)
+    async with env.ad_bot_srv._db_pool() as session:
+        session: AsyncSession
+        user = await session.scalar(
+            select(models.User).where(models.User.telegram_id == env.client.user.id) \
+                .options(selectinload(models.User.forward_queue))
         )
         msg = models.GroupChatMessage(
             source_id = 0,
@@ -461,7 +459,7 @@ async def test_refreshdialog_cmd_updates_data_in_window(env: Env):
             text_hash = ''
         )
         user.forward_queue.append(msg)
-        session.commit()
+        await session.commit()
     env.message_manager.reset_history()
     await env.client.send('/refresh_dialog')
 
