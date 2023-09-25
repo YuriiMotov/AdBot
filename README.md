@@ -8,7 +8,7 @@ This is a study project I'm developing to practice using various libraries, but 
  - aiogram-dialog 2.0.0
  - aiogram 3.0.0
  - telethon
- - SQLAlchemy
+ - SQLAlchemy (async)
  - APScheduler
 
 
@@ -54,7 +54,7 @@ Now the messages will be forwarded to the user.
 
 
 ## Future plans
- - switch to an asynchronous database
+ - [DONE] switch to an asynchronous database
  - add more e2e tests
  - add multilanguage support
  - divide all chats into categories and let the user choose which ones he wants to subscribe to
