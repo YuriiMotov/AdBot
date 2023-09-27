@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from sqlalchemy.orm import load_only, with_expression, selectinload
 
 from sqlalchemy import select, func
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError, OperationalError, TimeoutError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError, OperationalError
 
 from ..common.async_mixin import AsyncMixin
 from .messagebus import MessageBus
@@ -46,7 +46,8 @@ class AdBotServices(AsyncMixin):
         self._stopped = True
         self._db_pool = db_pool
         self.messagebus = MessageBus()
-        self._updated_uids = set()  # ids of users whose data were updated by _process_messages method
+        self._updated_uids = set()  # ids of users whose data were updated
+                                    # by _process_messages method
         self._CHECK_IDLE_CYCLES = CHECK_IDLE_CYCLES
         self._CHECK_IDLE_INTERVAL_SEC = CHECK_IDLE_INTERVAL_SEC
 
@@ -79,7 +80,8 @@ class AdBotServices(AsyncMixin):
                 `SQLAlchemyError` exception on DB error
         """
         st = select(models.User) \
-                .outerjoin_from(models.User, models.user_message_link).group_by(models.User.id) \
+                .outerjoin_from(models.User, models.user_message_link) \
+                .group_by(models.User.id) \
                 .where(models.User.id == user_id) \
                 .options(
                     selectinload(models.User.keywords),
@@ -121,7 +123,8 @@ class AdBotServices(AsyncMixin):
             async with self._db_pool() as session:
                 session: AsyncSession
                 st = select(models.User) \
-                        .outerjoin_from(models.User, models.user_message_link).group_by(models.User.id) \
+                        .outerjoin_from(models.User, models.user_message_link) \
+                        .group_by(models.User.id) \
                         .where(models.User.telegram_id == telegram_id) \
                         .options(
                             selectinload(models.User.keywords),
@@ -141,7 +144,9 @@ class AdBotServices(AsyncMixin):
             raise exc.AdBotExceptionSQL("SQLAlchemyError")
 
 
-    async def create_user_by_telegram_data(self, telegram_id: int, telegram_name: str) -> models.User:
+    async def create_user_by_telegram_data(
+        self, telegram_id: int, telegram_name: str
+    ) -> models.User:
         """
             Creates user.
             Returns created user's `user` object.
@@ -232,7 +237,8 @@ class AdBotServices(AsyncMixin):
         """
             Sets menu_closed state to `new_state`.
             Menu_closed=False means that user opened the menu.
-            When the menu is open, messages will not be forwarded to this user untill the menu is closed.
+            When the menu is open, messages will not be forwarded to this user untill the
+            menu is closed.
             Raises:
                 `AdBotExceptionUserNotExist` if user doesn`t exist
                 `AdBotExceptionSQL` exception on DB error
@@ -262,11 +268,14 @@ class AdBotServices(AsyncMixin):
         """
             Updates `last activity dt` in cache, sets it to now().
             `last activity dt` is used to determine when user forgot to close the menu.
-            After some time (IDLE_TIMEOUT_MINUTES) system will send command to close the menu.
+            After some time (IDLE_TIMEOUT_MINUTES) system will send command to close the
+            menu.
         """
         user_menu_activity_data = self._menu_activity_cache.get(user_id)
         if user_menu_activity_data is None:
-            logger.error(f'reset_inactivity_timer called for user with closed menu: {user_id}')
+            logger.error(
+                f'reset_inactivity_timer called for user with closed menu: {user_id}'
+            )
             user_menu_activity_data = {'menu_closed': False}
             self._menu_activity_cache[user_id] = user_menu_activity_data
         user_menu_activity_data['act_dt'] = datetime.now()
@@ -274,8 +283,10 @@ class AdBotServices(AsyncMixin):
    
     async def get_is_idle_with_opened_menu(self, user_id: int) -> bool:
         """
-            Returns True if user menu is open, but user is not active for some time (IDLE_TIMEOUT_MINUTES).
-            Uses cached data to determine whether the menu is open and idle timeout is riched.
+            Returns True if user menu is open, but user is not active for some time
+            (IDLE_TIMEOUT_MINUTES).
+            Uses cached data to determine whether the menu is open and idle timeout is
+            riched.
         """
         time_point = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
 
@@ -305,7 +316,9 @@ class AdBotServices(AsyncMixin):
                     async with self._db_pool() as session:
                         session: AsyncSession
                         user = await self._get_user_by_id(session, user_id)
-                        kw = await session.scalar(select(models.Keyword).where(models.Keyword.word == keyword))
+                        kw = await session.scalar(select(models.Keyword).where(
+                            models.Keyword.word == keyword)
+                        )
                         if (kw is None):
                             kw = models.Keyword(word=keyword)
                         if kw not in user.keywords:
@@ -336,7 +349,9 @@ class AdBotServices(AsyncMixin):
             async with self._db_pool() as session:
                 session: AsyncSession
                 user = await self._get_user_by_id(session, user_id)
-                kw = await session.scalar(select(models.Keyword).where(models.Keyword.word == keyword))
+                kw = await session.scalar(select(models.Keyword).where(
+                    models.Keyword.word == keyword)
+                )
                 if kw:
                     if kw in user.keywords:
                         user.keywords.remove(kw)
@@ -349,7 +364,9 @@ class AdBotServices(AsyncMixin):
 
     # Messages management
 
-    async def add_message(self, cat_id: int, source_id: int, msg_text: str, url: str) -> bool:
+    async def add_message(
+        self, cat_id: int, source_id: int, msg_text: str, url: str
+    ) -> bool:
         """
             Inserts message into DB.
             Returns True on success.
@@ -364,7 +381,9 @@ class AdBotServices(AsyncMixin):
                     cat_id=cat_id,
                     text=msg_text,
                     url=url,
-                    text_hash=md5(msg_text.encode('utf-8'), usedforsecurity=False).hexdigest()
+                    text_hash=md5(
+                        msg_text.encode('utf-8'), usedforsecurity=False
+                    ).hexdigest()
                 )
                 session.add(msg)
                 await session.commit()
@@ -425,18 +444,23 @@ class AdBotServices(AsyncMixin):
                     .where(models.User.subscription_state == True) \
                     .group_by(models.Keyword.id) \
                     .options(
-                        selectinload(models.Keyword.users).options(load_only(models.User.id, models.User.subscription_state))
+                        selectinload(models.Keyword.users).options(
+                            load_only(models.User.id, models.User.subscription_state)
+                        )
                     )
 
             for kw in (await session.scalars(st)).all():
-                self._keywords_cache[kw.word] = [user.id for user in kw.users if user.subscription_state]
+                self._keywords_cache[kw.word] = [
+                    user.id for user in kw.users if user.subscription_state
+                ]
 
         return self._keywords_cache     # Success
 
 
     async def _forward_messages(self) -> None:
         """
-            Generates `AdBotMessageForwardRequest` events for every message in user's forward queue.
+            Generates `AdBotMessageForwardRequest` events for every message in user's
+            forward queue.
             Removes messages from user's forward queues.
             Only for users with `forwarding` = True.
             Raises:
@@ -469,7 +493,8 @@ class AdBotServices(AsyncMixin):
     async def _check_idle_timeouts(self) -> None:
         """
             Generates `AdBotInactivityTimeout` events for inactive users with opened menu.
-            Uses cached data to determine whether the menu is open and idle timeout is riched.
+            Uses cached data to determine whether the menu is open and idle timeout is
+            riched.
         """
         for uid in self._menu_activity_cache.keys():
             if await self.get_is_idle_with_opened_menu(uid):
@@ -478,8 +503,8 @@ class AdBotServices(AsyncMixin):
 
     async def _check_user_data_updated(self) -> None:
         """
-            Generates `AdBotUserDataUpdated` events for users with opened menu whose data was updated by `_process_messages`
-            (messages to `forward_queue` were added).
+            Generates `AdBotUserDataUpdated` events for users with opened menu whose data
+            was updated by `_process_messages` (messages to `forward_queue` were added).
             Uses cached data to determine whether the menu is open and data were updated.
         """
         updated_uids = self._updated_uids
@@ -506,6 +531,7 @@ class AdBotServices(AsyncMixin):
             self._stop = True
             self._stopped = True
             self.messagebus.post_event(events.AdBotStop())
+            await self.messagebus.wait_for_tasks_done()
 
 
     async def _loop_iter(self) -> None:
@@ -513,8 +539,10 @@ class AdBotServices(AsyncMixin):
             One iteration of main loop.
             Processes messages (filter by users's keywords).
             Generates `AdBotMessageForwardRequest` events to forward messages to users.
-            Checks users's inactivity state and generates `AdBotInactivityTimeout` to close menus of inactive users.
-            Generates `AdBotUserDataUpdated` events for users with opened menu whose data was updated.
+            Checks users's inactivity state and generates `AdBotInactivityTimeout` to
+            close menus of inactive users.
+            Generates `AdBotUserDataUpdated` events for users with opened menu whose data
+            was updated.
         """
         counter = self._CHECK_IDLE_CYCLES
         while (not self._stop) and (counter > 0):
@@ -544,8 +572,10 @@ class AdBotServices(AsyncMixin):
         """
             Processes messages (filter by users's keywords).
             Generates `AdBotMessageForwardRequest` events to forward messages to users.
-            Checks users's inactivity state and generates `AdBotInactivityTimeout` to close menus of inactive users.
-            Generates `AdBotUserDataUpdated` events for users with opened menu whose data was updated.
+            Checks users's inactivity state and generates `AdBotInactivityTimeout`
+            to close menus of inactive users.
+            Generates `AdBotUserDataUpdated` events for users with opened menu whose data
+            was updated.
         """
         while not self._stop:
             await self._loop_iter()

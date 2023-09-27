@@ -4,29 +4,27 @@ import pytest
 import pytest_asyncio
 import random
 from typing import Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from aiogram import Bot, Dispatcher
 from aiogram.types import Message
 from aiogram_dialog.test_tools import BotClient, MockMessageManager
 from telethon import TelegramClient
-from telethon.tl.types import User, Message as TelethonMessage
+from telethon.tl.types import User
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession, create_async_engine
-from sqlalchemy.pool import QueuePool
+from sqlalchemy.ext.asyncio import async_sessionmaker,create_async_engine
 
 from adbot.domain import models
 from adbot.app.app import AdBotApp
 from adbot.app.config_reader import config
 from adbot.domain.services import AdBotServices
 from adbot.presentation.telegram.tg_bot import TGBot
-from adbot.presentation.telegram.filters import ChatName, SenderId
+from adbot.presentation.telegram.filters import SenderId
 
 
 async def _sessionmaker(url: str) -> async_sessionmaker:
     engine = create_async_engine(
         url, pool_pre_ping=True,
-        pool_size=5, max_overflow=10
     )
 
     async with engine.begin() as conn:
@@ -73,7 +71,7 @@ async def config_url_adbot_srv(config_url_sessionmaker):
 
 
 
-# ==============================================================================================
+# ========================================================================================
 # enviroument for integration tests
 
 @dataclass
@@ -123,7 +121,7 @@ def env(in_memory_adbot_srv: AdBotServices) -> Env:
             yield e 
 
 
-# ==============================================================================================
+# ========================================================================================
 # Inviroument for e2e tests
 
 async def echo_handler(message: Message, bot: Bot):
@@ -163,7 +161,9 @@ class TestableApp(AdBotApp):
     async def _db_connect(self) -> async_sessionmaker:
         return await _in_memory_db_sessionmaker()
 
-    async def _create_ad_bot_services(self, db_pool: async_sessionmaker) -> TestableAdBotSrv:
+    async def _create_ad_bot_services(
+        self, db_pool: async_sessionmaker
+    ) -> TestableAdBotSrv:
         ad_bot_srv = await TestableAdBotSrv(db_pool)
         ad_bot_srv._CHECK_IDLE_CYCLES = 1
         ad_bot_srv._CHECK_IDLE_INTERVAL_SEC = 1
@@ -205,7 +205,7 @@ async def e2e_env(e2e_confirmation) -> E2E_Env:
     yield e 
 
 
-# ==============================================================================================
+# ========================================================================================
 # helpers
 
 def mock_method_raise_SQLAlchemyError(*arg, **kwarg):

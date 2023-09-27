@@ -12,7 +12,7 @@ from adbot.domain import events
 from conftest import brake_sessionmaker
 
 
-# ==============================================================================================
+# ========================================================================================
 # __init__
 
 @pytest.mark.asyncio
@@ -27,7 +27,7 @@ async def test_adbot_init_raises_exception_on_sql_error(in_memory_db_sessionmake
         adbot_srv = await AdBotServices(db_pool_broken)
 
 
-# ==============================================================================================
+# ========================================================================================
 # get_user, create_user (by user_id, by telegram_id)
 
 @pytest.mark.asyncio
@@ -54,7 +54,9 @@ async def test_get_user_by_tg_id_raises_UserNotExist_when_user_doesnt_exist(
 async def test_create_user_by_tg_data_returns_user(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
     
     assert user is not None
     assert user.telegram_id == 123456789
@@ -62,21 +64,33 @@ async def test_create_user_by_tg_data_returns_user(in_memory_adbot_srv: AdBotSer
 
 
 @pytest.mark.asyncio
-async def test_create_user_by_tg_data_raises_exception_on_sql_error(in_memory_adbot_srv: AdBotServices):
+async def test_create_user_by_tg_data_raises_exception_on_sql_error(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
-    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)    # broken DB returns SQLAlchemyError on every query and commit
+
+    # broken DB returns SQLAlchemyError on every query and commit
+    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)
 
     with pytest.raises(exc.AdBotExceptionSQL):
-        await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+        await adbot_srv.create_user_by_telegram_data(
+            telegram_id=123456789, telegram_name='asd'
+        )
     
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_telegram_id_returns_correct_user(in_memory_adbot_srv: AdBotServices):
+async def test_get_user_by_telegram_id_returns_correct_user(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
-    await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
-    await adbot_srv.create_user_by_telegram_data(telegram_id=987654321, telegram_name='dsa')
+    await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
+    await adbot_srv.create_user_by_telegram_data(
+        telegram_id=987654321, telegram_name='dsa'
+    )
 
     user1 = await adbot_srv.get_user_by_telegram_id(123456789)
     assert user1.telegram_id == 123456789
@@ -88,11 +102,17 @@ async def test_get_user_by_telegram_id_returns_correct_user(in_memory_adbot_srv:
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_user_id_returns_correct_user(in_memory_adbot_srv: AdBotServices):
+async def test_get_user_by_user_id_returns_correct_user(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
-    created_user1 = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
-    created_user2 = await adbot_srv.create_user_by_telegram_data(telegram_id=987654321, telegram_name='dsa')
+    created_user1 = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
+    created_user2 = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=987654321, telegram_name='dsa'
+    )
 
     selected_user = await adbot_srv.get_user_by_id(created_user1.id)
     assert selected_user is not None
@@ -107,14 +127,16 @@ async def test_get_user_by_user_id_returns_correct_user(in_memory_adbot_srv: AdB
     assert selected_user.telegram_name == 'dsa'
 
 
-# ==============================================================================================
+# ========================================================================================
 # user subscription state management
 
 @pytest.mark.asyncio
 async def test_subscription_state_default_is_false(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
     assert user.subscription_state is False
 
     user = await adbot_srv.get_user_by_telegram_id(123456789)
@@ -125,7 +147,9 @@ async def test_subscription_state_default_is_false(in_memory_adbot_srv: AdBotSer
 async def test_set_subscription_state(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
     assert user.subscription_state is False
 
     await adbot_srv.set_subscription_state(user.id, True)
@@ -141,9 +165,13 @@ async def test_set_subscription_state(in_memory_adbot_srv: AdBotServices):
 async def test_set_subscription_state_two_users(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
-    user1 = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user1 = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
     assert user1.subscription_state is False
-    user2 = await adbot_srv.create_user_by_telegram_data(telegram_id=987654321, telegram_name='dsa')
+    user2 = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=987654321, telegram_name='dsa'
+    )
     assert user2.subscription_state is False
 
     await adbot_srv.set_subscription_state(user1.id, True)
@@ -163,7 +191,9 @@ async def test_set_subscription_state_two_users(in_memory_adbot_srv: AdBotServic
 
 
 @pytest.mark.asyncio
-async def test_set_subscription_state_raises_exception_when_user_doesnt_exist(in_memory_adbot_srv: AdBotServices):
+async def test_set_subscription_state_raises_exception_when_user_doesnt_exist(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     with pytest.raises(exc.AdBotExceptionUserNotExist):
@@ -171,24 +201,34 @@ async def test_set_subscription_state_raises_exception_when_user_doesnt_exist(in
 
 
 @pytest.mark.asyncio
-async def test_set_subscription_state_raises_exception_on_sql_error(in_memory_adbot_srv: AdBotServices):
+async def test_set_subscription_state_raises_exception_on_sql_error(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
 
-    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)    # broken DB returns SQLAlchemyError on every query and commit
+    # broken DB returns SQLAlchemyError on every query and commit
+    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)
+    
     with pytest.raises(exc.AdBotExceptionSQL):
         await adbot_srv.set_subscription_state(user.id, True)
 
 
-# ==============================================================================================
+# ========================================================================================
 # user forwarding state management
 
 @pytest.mark.asyncio
-async def test_forwarding_state_default_is_true_for_telegram_user(in_memory_adbot_srv: AdBotServices):
+async def test_forwarding_state_default_is_true_for_telegram_user(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
     assert user.forwarding_state is True
 
     user = await adbot_srv.get_user_by_telegram_id(123456789)
@@ -199,7 +239,9 @@ async def test_forwarding_state_default_is_true_for_telegram_user(in_memory_adbo
 async def test_set_forwarding_state(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
     assert user.forwarding_state is True
 
     await adbot_srv.set_forwarding_state(user.id, False)
@@ -215,8 +257,12 @@ async def test_set_forwarding_state(in_memory_adbot_srv: AdBotServices):
 async def test_set_forwarding_state_two_users(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
-    user1 = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
-    user2 = await adbot_srv.create_user_by_telegram_data(telegram_id=987654321, telegram_name='dsa')
+    user1 = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
+    user2 = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=987654321, telegram_name='dsa'
+    )
 
     await adbot_srv.set_forwarding_state(user1.id, False)
     
@@ -235,7 +281,9 @@ async def test_set_forwarding_state_two_users(in_memory_adbot_srv: AdBotServices
 
 
 @pytest.mark.asyncio
-async def test_set_forwarding_state_raises_exception_when_user_doesnt_exist(in_memory_adbot_srv: AdBotServices):
+async def test_set_forwarding_state_raises_exception_when_user_doesnt_exist(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     with pytest.raises(exc.AdBotExceptionUserNotExist):
@@ -243,24 +291,32 @@ async def test_set_forwarding_state_raises_exception_when_user_doesnt_exist(in_m
 
 
 @pytest.mark.asyncio
-async def test_set_forwarding_state_raises_exception_on_sql_error(in_memory_adbot_srv: AdBotServices):
+async def test_set_forwarding_state_raises_exception_on_sql_error(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
 
-    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)    # broken DB returns SQLAlchemyError on every query and commit
+    # broken DB returns SQLAlchemyError on every query and commit
+    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)
+    
     with pytest.raises(exc.AdBotExceptionSQL):
         await adbot_srv.set_forwarding_state(user.id, False)
 
 
-# ==============================================================================================
+# ========================================================================================
 # user menu closed state management
 
 @pytest.mark.asyncio
 async def test_menu_closed_state_default_is_true(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
     assert user.menu_closed is True
 
     user = await adbot_srv.get_user_by_telegram_id(123456789)
@@ -271,7 +327,9 @@ async def test_menu_closed_state_default_is_true(in_memory_adbot_srv: AdBotServi
 async def test_set_menu_closed_state(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
     assert user.menu_closed is True
 
     await adbot_srv.set_menu_closed_state(user.id, False)
@@ -284,7 +342,9 @@ async def test_set_menu_closed_state(in_memory_adbot_srv: AdBotServices):
 
 
 @pytest.mark.asyncio
-async def test_set_menu_closed_state_raises_exception_when_user_doesnt_exist(in_memory_adbot_srv: AdBotServices):
+async def test_set_menu_closed_state_raises_exception_when_user_doesnt_exist(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     with pytest.raises(exc.AdBotExceptionUserNotExist):
@@ -292,27 +352,51 @@ async def test_set_menu_closed_state_raises_exception_when_user_doesnt_exist(in_
 
 
 @pytest.mark.asyncio
-async def test_set_menu_closed_state_raises_exception_on_sql_error(in_memory_adbot_srv: AdBotServices):
+async def test_set_menu_closed_state_raises_exception_on_sql_error(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
+    
+    # broken DB returns SQLAlchemyError on every query and commit
+    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)
 
-    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)    # broken DB returns SQLAlchemyError on every query and commit
     with pytest.raises(exc.AdBotExceptionSQL):
         await adbot_srv.set_menu_closed_state(user.id, True)
 
 
-# ==============================================================================================
+# ========================================================================================
 # user idle timeout management
 
 @pytest.mark.asyncio
-async def test_onload_set_last_activity_dt_for_users_with_opened_menu(in_memory_db_sessionmaker):
+async def test_onload_set_last_activity_dt_for_users_with_opened_menu(
+    in_memory_db_sessionmaker
+):
     async with in_memory_db_sessionmaker() as session:
         session: AsyncSession
-        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 1)'))
-        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (222222, 0)'))
-        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (333333, 1)'))
-        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (444444, 0)'))
+        await session.execute(
+            text(
+                f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 1)'
+            )
+        )
+        await session.execute(
+            text(
+                f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (222222, 0)'
+            )
+        )
+        await session.execute(
+            text(
+                f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (333333, 1)'
+            )
+        )
+        await session.execute(
+            text(
+                f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (444444, 0)'
+            )
+        )
         await session.commit()
 
     adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
@@ -326,36 +410,50 @@ async def test_onload_set_last_activity_dt_for_users_with_opened_menu(in_memory_
     assert last_activity_dt_uids[1] in user_ids_set
     user_ids_set.remove(last_activity_dt_uids[1])
 
-    left_dt = datetime.now() - timedelta(seconds=1)
-    assert left_dt <= adbot_srv._menu_activity_cache[user_ids[0]]['act_dt'] <= datetime.now()
-    assert left_dt <= adbot_srv._menu_activity_cache[user_ids[1]]['act_dt'] <= datetime.now()
+    now = datetime.now()
+    left_dt = now - timedelta(seconds=1)
+    assert left_dt <= adbot_srv._menu_activity_cache[user_ids[0]]['act_dt'] <= now
+    assert left_dt <= adbot_srv._menu_activity_cache[user_ids[1]]['act_dt'] <= now
 
 
 @pytest.mark.asyncio
 async def test_get_is_idle_default_false(in_memory_db_sessionmaker):
     async with in_memory_db_sessionmaker() as session:
         session: AsyncSession
-        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 1)'))
+        st = text(
+            f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 1)'
+        )
+        await session.execute(st)
         await session.commit()
     adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
     assert (await adbot_srv.get_is_idle_with_opened_menu(1)) == False
 
 
 @pytest.mark.asyncio
-async def test_get_is_idle_onload_on_user_with_opened_menu_returns_false(in_memory_db_sessionmaker):
+async def test_get_is_idle_onload_on_user_with_opened_menu_returns_false(
+    in_memory_db_sessionmaker
+):
     async with in_memory_db_sessionmaker() as session:
         session: AsyncSession
-        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
+        st = text(
+            f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'
+        )
+        await session.execute(st)
         await session.commit()
     adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
     assert (await adbot_srv.get_is_idle_with_opened_menu(1)) == False
 
 
 @pytest.mark.asyncio
-async def test_get_is_idle_on_user_with_timeout_more_when_limit_returns_true(in_memory_db_sessionmaker):
+async def test_get_is_idle_on_user_with_timeout_more_when_limit_returns_true(
+    in_memory_db_sessionmaker
+):
     async with in_memory_db_sessionmaker() as session:
         session: AsyncSession
-        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
+        st = text(
+            f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'
+        )
+        await session.execute(st)
         await session.commit()
     adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
 
@@ -365,10 +463,15 @@ async def test_get_is_idle_on_user_with_timeout_more_when_limit_returns_true(in_
 
 
 @pytest.mark.asyncio
-async def test_get_is_idle_on_user_with_timeout_less_when_limit_returns_false(in_memory_db_sessionmaker):
+async def test_get_is_idle_on_user_with_timeout_less_when_limit_returns_false(
+    in_memory_db_sessionmaker
+):
     async with in_memory_db_sessionmaker() as session:
         session: AsyncSession
-        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
+        st = text(
+            f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'
+        )
+        await session.execute(st)
         await session.commit()
     adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
 
@@ -381,7 +484,10 @@ async def test_get_is_idle_on_user_with_timeout_less_when_limit_returns_false(in
 async def test_get_reset_inactivity_timer(in_memory_db_sessionmaker):
     async with in_memory_db_sessionmaker() as session:
         session: AsyncSession
-        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
+        st = text(
+            f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'
+        )
+        await session.execute(st)
         await session.commit()
     adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
 
@@ -394,10 +500,15 @@ async def test_get_reset_inactivity_timer(in_memory_db_sessionmaker):
 
 
 @pytest.mark.asyncio
-async def test_get_is_idle_on_user_with_timeout_more_when_limit_and_closed_menu_returns_false(in_memory_db_sessionmaker):
+async def test_get_is_idle_when_idle_time_exceed_limit_and_menu_is_closed_returns_false(
+    in_memory_db_sessionmaker
+):
     async with in_memory_db_sessionmaker() as session:
         session: AsyncSession
-        await session.execute(text(f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'))
+        st = text(
+            f'INSERT INTO user_account (telegram_id, menu_closed) VALUES (111111, 0)'
+        )
+        await session.execute(st)
         await session.commit()
     adbot_srv = await AdBotServices(in_memory_db_sessionmaker)
     idle_point = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
@@ -406,14 +517,16 @@ async def test_get_is_idle_on_user_with_timeout_more_when_limit_and_closed_menu_
     assert (await adbot_srv.get_is_idle_with_opened_menu(1)) == False
 
 
-# ==============================================================================================
+# ========================================================================================
 # user keywords list management
 
 @pytest.mark.asyncio
 async def test_add_keyword(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
 
     res = await adbot_srv.add_keyword(user.id, 'new_keyword')
     assert res == True
@@ -424,19 +537,26 @@ async def test_add_keyword(in_memory_adbot_srv: AdBotServices):
 
 
 @pytest.mark.asyncio
-async def test_add_keyword_raises_exception_on_sql_error(in_memory_adbot_srv: AdBotServices):
+async def test_add_keyword_raises_exception_on_sql_error(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
 
-    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)    # broken DB returns SQLAlchemyError on every query and commit
+    # broken DB returns SQLAlchemyError on every query and commit
+    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)
 
     with pytest.raises(exc.AdBotExceptionSQL):
         await adbot_srv.add_keyword(user.id, 'new_keyword')
 
 
 @pytest.mark.asyncio
-async def test_add_keyword_raises_exception_if_user_doesnt_exist(in_memory_adbot_srv: AdBotServices):
+async def test_add_keyword_raises_exception_if_user_doesnt_exist(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     with pytest.raises(exc.AdBotExceptionUserNotExist):
@@ -447,7 +567,9 @@ async def test_add_keyword_raises_exception_if_user_doesnt_exist(in_memory_adbot
 async def test_add_keyword_unique_in_user_list(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
 
     res = await adbot_srv.add_keyword(user.id, 'new_keyword')
     assert res == True
@@ -464,8 +586,12 @@ async def test_add_keyword_unique_in_user_list(in_memory_adbot_srv: AdBotService
 async def test_add_keyword_word_is_unique_in_db(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
-    user1 = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
-    user2 = await adbot_srv.create_user_by_telegram_data(telegram_id=987654321, telegram_name='dsa')
+    user1 = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
+    user2 = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=987654321, telegram_name='dsa'
+    )
 
     res = await adbot_srv.add_keyword(user1.id, 'new_keyword')
     assert res == True
@@ -484,7 +610,9 @@ async def test_add_keyword_word_is_unique_in_db(in_memory_adbot_srv: AdBotServic
 async def test_remove_keyword(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
     res = await adbot_srv.add_keyword(user.id, 'new_keyword')
     assert res == True
     user = await adbot_srv.get_user_by_telegram_id(123456789)
@@ -497,10 +625,14 @@ async def test_remove_keyword(in_memory_adbot_srv: AdBotServices):
 
 
 @pytest.mark.asyncio
-async def test_remove_keyword_return_true_if_not_exist(in_memory_adbot_srv: AdBotServices):
+async def test_remove_keyword_return_true_if_not_exist(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
 
     res = await adbot_srv.remove_keyword(user.id, 'new_keyword')
     assert res == True
@@ -509,7 +641,9 @@ async def test_remove_keyword_return_true_if_not_exist(in_memory_adbot_srv: AdBo
 
 
 @pytest.mark.asyncio
-async def test_remove_keyword_raises_exception_if_user_doesnt_exist(in_memory_adbot_srv: AdBotServices):
+async def test_remove_keyword_raises_exception_if_user_doesnt_exist(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     with pytest.raises(exc.AdBotExceptionUserNotExist):
@@ -517,14 +651,20 @@ async def test_remove_keyword_raises_exception_if_user_doesnt_exist(in_memory_ad
 
 
 @pytest.mark.asyncio
-async def test_remove_keyword_raises_exception_on_sql_error(in_memory_adbot_srv: AdBotServices):
+async def test_remove_keyword_raises_exception_on_sql_error(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
-    user = await adbot_srv.create_user_by_telegram_data(telegram_id=123456789, telegram_name='asd')
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
     res = await adbot_srv.add_keyword(user.id, 'new_keyword')
     assert res == True
 
-    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)    # broken DB returns SQLAlchemyError on every query and commit
+    # broken DB returns SQLAlchemyError on every query and commit
+    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)
+    
     with pytest.raises(exc.AdBotExceptionSQL):
         await adbot_srv.remove_keyword(user.id, 'new_keyword')
 
@@ -648,7 +788,7 @@ async def test_get_all_keywords_subscription_on_off(in_memory_adbot_srv: AdBotSe
         assert len(users) == kw_users[kw]
 
 
-# ==============================================================================================
+# ========================================================================================
 # message management
 
 @pytest.mark.asyncio
@@ -676,10 +816,14 @@ async def test_add_message(in_memory_adbot_srv: AdBotServices):
 
 
 @pytest.mark.asyncio
-async def test_add_message_raise_exception_on_sql_error(in_memory_adbot_srv: AdBotServices):
+async def test_add_message_raise_exception_on_sql_error(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
-
-    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)    # broken DB returns SQLAlchemyError on every query and commit
+    
+    # broken DB returns SQLAlchemyError on every query and commit
+    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)
+    
     with pytest.raises(exc.AdBotExceptionSQL):
         await adbot_srv.add_message(11, 22, 'message_text', 'https://t.me/c/123/456')
 
@@ -688,10 +832,18 @@ async def test_add_message_raise_exception_on_sql_error(in_memory_adbot_srv: AdB
 async def test_get_all_keywords(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
-    res = await adbot_srv.add_message(11, 22, 'apple banana orange', 'https://t.me/c/123/456')
-    res = await adbot_srv.add_message(12, 23, 'car bicycle scooter', 'https://t.me/c/456/789')
-    res = await adbot_srv.add_message(13, 24, 'pen pencil brush', 'https://t.me/c/789/012')
-    res = await adbot_srv.add_message(14, 25, 'chair table sofa', 'https://t.me/c/012/345')
+    res = await adbot_srv.add_message(
+        11, 22, 'apple banana orange', 'https://t.me/c/123/456'
+    )
+    res = await adbot_srv.add_message(
+        12, 23, 'car bicycle scooter', 'https://t.me/c/456/789'
+    )
+    res = await adbot_srv.add_message(
+        13, 24, 'pen pencil brush', 'https://t.me/c/789/012'
+    )
+    res = await adbot_srv.add_message(
+        14, 25, 'chair table sofa', 'https://t.me/c/012/345'
+    )
 
     user = await adbot_srv.create_user_by_telegram_data(11111, 'asd')
     await adbot_srv.set_subscription_state(user.id, True)
@@ -713,10 +865,18 @@ async def test_get_all_keywords(in_memory_adbot_srv: AdBotServices):
 async def test_process_messages_one_user(in_memory_adbot_srv: AdBotServices):
     adbot_srv = in_memory_adbot_srv
 
-    res = await adbot_srv.add_message(11, 22, 'apple banana orange', 'https://t.me/c/123/456')
-    res = await adbot_srv.add_message(12, 23, 'car bicycle scooter', 'https://t.me/c/456/789')
-    res = await adbot_srv.add_message(13, 24, 'pen pencil brush', 'https://t.me/c/789/012')
-    res = await adbot_srv.add_message(14, 25, 'chair table sofa', 'https://t.me/c/012/345')
+    res = await adbot_srv.add_message(
+        11, 22, 'apple banana orange', 'https://t.me/c/123/456'
+    )
+    res = await adbot_srv.add_message(
+        12, 23, 'car bicycle scooter', 'https://t.me/c/456/789'
+    )
+    res = await adbot_srv.add_message(
+        13, 24, 'pen pencil brush', 'https://t.me/c/789/012'
+    )
+    res = await adbot_srv.add_message(
+        14, 25, 'chair table sofa', 'https://t.me/c/012/345'
+    )
 
     user = await adbot_srv.create_user_by_telegram_data(11111, 'asd')
     await adbot_srv.set_subscription_state(user.id, True)
@@ -744,7 +904,8 @@ async def test_process_messages_one_user(in_memory_adbot_srv: AdBotServices):
     res = None
     async with adbot_srv._db_pool() as session:
         session: AsyncSession
-        res = (await session.execute(text(f"SELECT user_id, message_id FROM user_message_link"))).all()
+        st = text(f"SELECT user_id, message_id FROM user_message_link")
+        res = (await session.execute(st)).all()
 
     msg_ids = [1, 2, 4]
     assert res is not None
@@ -761,7 +922,9 @@ async def test_process_messages_one_user(in_memory_adbot_srv: AdBotServices):
 
 
 @pytest.mark.asyncio
-async def test_process_messages_raises_exception_on_sql_error(in_memory_adbot_srv: AdBotServices):
+async def test_process_messages_raises_exception_on_sql_error(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     await adbot_srv.add_message(11, 22, 'apple banana orange', 'https://t.me/c/123/456')
@@ -771,12 +934,14 @@ async def test_process_messages_raises_exception_on_sql_error(in_memory_adbot_sr
 
     await adbot_srv.add_keyword(user.id, 'apple')
 
-    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)    # broken DB returns SQLAlchemyError on every query and commit
+    # broken DB returns SQLAlchemyError on every query and commit
+    adbot_srv._db_pool = brake_sessionmaker(adbot_srv._db_pool)
+
     with pytest.raises(exc.AdBotExceptionSQL):
         await adbot_srv._process_messages()
 
 
-# ==============================================================================================
+# ========================================================================================
 # Message forwarding
 
 @pytest.mark.asyncio
@@ -787,7 +952,9 @@ async def test_forward_messages(in_memory_adbot_srv: AdBotServices):
     async def fake_subscriber_func_local(event: mb.AdBotEvent):
         catched_events.append(event)
 
-    adbot_srv.messagebus.subscribe([events.AdBotMessageForwardRequest], fake_subscriber_func_local)
+    adbot_srv.messagebus.subscribe(
+        [events.AdBotMessageForwardRequest], fake_subscriber_func_local
+    )
 
     await adbot_srv.add_message(11, 22, 'apple banana orange', 'https://t.me/c/123/456')
     await adbot_srv.add_message(12, 23, 'car bicycle', 'https://t.me/c/234/567')
@@ -815,14 +982,18 @@ async def test_forward_messages(in_memory_adbot_srv: AdBotServices):
 
 
 @pytest.mark.asyncio
-async def test_forward_messages_does_nothing_if_forwarding_disabled(in_memory_adbot_srv: AdBotServices):
+async def test_forward_messages_does_nothing_if_forwarding_disabled(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     catched_events = []
     async def fake_subscriber_func_local(event: mb.AdBotEvent):
         catched_events.append(event)
 
-    adbot_srv.messagebus.subscribe([events.AdBotMessageForwardRequest], fake_subscriber_func_local)
+    adbot_srv.messagebus.subscribe(
+        [events.AdBotMessageForwardRequest], fake_subscriber_func_local
+    )
 
     await adbot_srv.add_message(11, 22, 'apple banana orange', 'https://t.me/c/123/456')
     await adbot_srv.add_message(12, 23, 'car bicycle', 'https://t.me/c/234/567')
@@ -848,7 +1019,9 @@ async def test_forward_messages_two_users(in_memory_adbot_srv: AdBotServices):
     async def fake_subscriber_func_local(event: mb.AdBotEvent):
         catched_events.append(event)
 
-    adbot_srv.messagebus.subscribe([events.AdBotMessageForwardRequest], fake_subscriber_func_local)
+    adbot_srv.messagebus.subscribe(
+        [events.AdBotMessageForwardRequest], fake_subscriber_func_local
+    )
 
     await adbot_srv.add_message(11, 22, 'apple banana orange', 'https://t.me/c/123/456')
     await adbot_srv.add_message(12, 23, 'car bicycle', 'https://t.me/c/234/567')
@@ -889,18 +1062,22 @@ async def test_forward_messages_two_users(in_memory_adbot_srv: AdBotServices):
     messages_to_users[catched_events[3].message_text].remove(catched_events[3].user_id)
 
 
-# ==============================================================================================
+# ========================================================================================
 # Inactivity timeout events
 
 @pytest.mark.asyncio
-async def test_inactivity_timeouts_none_when_menu_closed(in_memory_adbot_srv: AdBotServices):
+async def test_inactivity_timeouts_none_when_menu_closed(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     catched_events = []
     async def fake_subscriber_func_local(event: mb.AdBotEvent):
         catched_events.append(event)
 
-    adbot_srv.messagebus.subscribe([events.AdBotInactivityTimeout], fake_subscriber_func_local)
+    adbot_srv.messagebus.subscribe(
+        [events.AdBotInactivityTimeout], fake_subscriber_func_local
+    )
 
     user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     adbot_srv._menu_activity_cache[user.id] = {
@@ -914,14 +1091,18 @@ async def test_inactivity_timeouts_none_when_menu_closed(in_memory_adbot_srv: Ad
     
 
 @pytest.mark.asyncio
-async def test_inactivity_timeouts_none_when_user_active(in_memory_adbot_srv: AdBotServices):
+async def test_inactivity_timeouts_none_when_user_active(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     catched_events = []
     async def fake_subscriber_func_local(event: mb.AdBotEvent):
         catched_events.append(event)
 
-    adbot_srv.messagebus.subscribe([events.AdBotInactivityTimeout], fake_subscriber_func_local)
+    adbot_srv.messagebus.subscribe(
+        [events.AdBotInactivityTimeout], fake_subscriber_func_local
+    )
 
     user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     await adbot_srv.set_menu_closed_state(user.id, False)
@@ -933,18 +1114,23 @@ async def test_inactivity_timeouts_none_when_user_active(in_memory_adbot_srv: Ad
     
 
 @pytest.mark.asyncio
-async def test_inactivity_timeouts_none_when_user_active_2(in_memory_adbot_srv: AdBotServices):
+async def test_inactivity_timeouts_none_when_user_active_2(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     catched_events = []
     async def fake_subscriber_func_local(event: mb.AdBotEvent):
         catched_events.append(event)
 
-    adbot_srv.messagebus.subscribe([events.AdBotInactivityTimeout], fake_subscriber_func_local)
+    adbot_srv.messagebus.subscribe(
+        [events.AdBotInactivityTimeout], fake_subscriber_func_local
+    )
 
     user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     await adbot_srv.set_menu_closed_state(user.id, False)
-    adbot_srv._menu_activity_cache[user.id]['act_dt'] = datetime.now() - timedelta(seconds=IDLE_TIMEOUT_MINUTES*60 - 1)
+    adbot_srv._menu_activity_cache[user.id]['act_dt'] = \
+        datetime.now() - timedelta(seconds=IDLE_TIMEOUT_MINUTES*60 - 1)
 
     await adbot_srv._check_idle_timeouts()
     await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
@@ -953,18 +1139,23 @@ async def test_inactivity_timeouts_none_when_user_active_2(in_memory_adbot_srv: 
 
 
 @pytest.mark.asyncio
-async def test_inactivity_timeouts_event_when_user_inactive_and_menu_open(in_memory_adbot_srv: AdBotServices):
+async def test_inactivity_timeouts_event_when_user_inactive_and_menu_open(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     catched_events = []
     async def fake_subscriber_func_local(event: mb.AdBotEvent):
         catched_events.append(event)
 
-    adbot_srv.messagebus.subscribe([events.AdBotInactivityTimeout], fake_subscriber_func_local)
+    adbot_srv.messagebus.subscribe(
+        [events.AdBotInactivityTimeout], fake_subscriber_func_local
+    )
 
     user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     await adbot_srv.set_menu_closed_state(user.id, False)
-    adbot_srv._menu_activity_cache[user.id]['act_dt'] = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES*2)
+    adbot_srv._menu_activity_cache[user.id]['act_dt'] = \
+        datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES*2)
     await adbot_srv._check_idle_timeouts()
     await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
 
@@ -979,12 +1170,15 @@ async def test_inactivity_timeouts_several_users(in_memory_adbot_srv: AdBotServi
     async def fake_subscriber_func_local(event: mb.AdBotEvent):
         catched_events.append(event)
 
-    adbot_srv.messagebus.subscribe([events.AdBotInactivityTimeout], fake_subscriber_func_local)
+    adbot_srv.messagebus.subscribe(
+        [events.AdBotInactivityTimeout], fake_subscriber_func_local
+    )
 
     # User1 - menu is open and user is inactive
     user1 = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     await adbot_srv.set_menu_closed_state(user1.id, False)
-    adbot_srv._menu_activity_cache[user1.id]['act_dt'] = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
+    adbot_srv._menu_activity_cache[user1.id]['act_dt'] = \
+        datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
 
     # User2 - menu is open and user is active
     user2 = await adbot_srv.create_user_by_telegram_data(222222, 'dsa')
@@ -993,7 +1187,8 @@ async def test_inactivity_timeouts_several_users(in_memory_adbot_srv: AdBotServi
     # User3 - menu is open and user is inactive
     user3 = await adbot_srv.create_user_by_telegram_data(333333, 'sda')
     await adbot_srv.set_menu_closed_state(user3.id, False)
-    adbot_srv._menu_activity_cache[user3.id]['act_dt'] = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES*2)
+    adbot_srv._menu_activity_cache[user3.id]['act_dt'] =  \
+        datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES*2)
 
     await adbot_srv._check_idle_timeouts()
     await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
@@ -1006,7 +1201,7 @@ async def test_inactivity_timeouts_several_users(in_memory_adbot_srv: AdBotServi
     uids.remove(catched_events[1].user_id)
 
 
-# ==============================================================================================
+# ========================================================================================
 # `User data updated` events
 
 @pytest.mark.asyncio
@@ -1017,7 +1212,9 @@ async def test_check_user_data_updated_generate_event(in_memory_adbot_srv: AdBot
     async def fake_subscriber_func_local(event: mb.AdBotEvent):
         catched_events.append(event)
 
-    adbot_srv.messagebus.subscribe([events.AdBotUserDataUpdated], fake_subscriber_func_local)
+    adbot_srv.messagebus.subscribe(
+        [events.AdBotUserDataUpdated], fake_subscriber_func_local
+    )
 
     user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     await adbot_srv.set_subscription_state(user.id, True)
@@ -1034,14 +1231,18 @@ async def test_check_user_data_updated_generate_event(in_memory_adbot_srv: AdBot
 
 
 @pytest.mark.asyncio
-async def test_check_user_data_updated_doesnt_generate_event_if_menu_closed(in_memory_adbot_srv: AdBotServices):
+async def test_check_user_data_updated_doesnt_generate_event_if_menu_closed(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     catched_events = []
     async def fake_subscriber_func_local(event: mb.AdBotEvent):
         catched_events.append(event)
 
-    adbot_srv.messagebus.subscribe([events.AdBotUserDataUpdated], fake_subscriber_func_local)
+    adbot_srv.messagebus.subscribe(
+        [events.AdBotUserDataUpdated], fake_subscriber_func_local
+    )
 
     user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     await adbot_srv.set_subscription_state(user.id, True)
@@ -1056,14 +1257,18 @@ async def test_check_user_data_updated_doesnt_generate_event_if_menu_closed(in_m
 
 
 @pytest.mark.asyncio
-async def test_check_user_data_updated_doesnt_duplicate_event(in_memory_adbot_srv: AdBotServices):
+async def test_check_user_data_updated_doesnt_duplicate_event(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     catched_events = []
     async def fake_subscriber_func_local(event: mb.AdBotEvent):
         catched_events.append(event)
 
-    adbot_srv.messagebus.subscribe([events.AdBotUserDataUpdated], fake_subscriber_func_local)
+    adbot_srv.messagebus.subscribe(
+        [events.AdBotUserDataUpdated], fake_subscriber_func_local
+    )
 
     user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     await adbot_srv.set_subscription_state(user.id, True)
@@ -1082,14 +1287,18 @@ async def test_check_user_data_updated_doesnt_duplicate_event(in_memory_adbot_sr
 
 
 @pytest.mark.asyncio
-async def test_check_user_data_updated_generate_second_event(in_memory_adbot_srv: AdBotServices):
+async def test_check_user_data_updated_generate_second_event(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     catched_events = []
     async def fake_subscriber_func_local(event: mb.AdBotEvent):
         catched_events.append(event)
 
-    adbot_srv.messagebus.subscribe([events.AdBotUserDataUpdated], fake_subscriber_func_local)
+    adbot_srv.messagebus.subscribe(
+        [events.AdBotUserDataUpdated], fake_subscriber_func_local
+    )
 
     user = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     await adbot_srv.set_subscription_state(user.id, True)
@@ -1111,14 +1320,18 @@ async def test_check_user_data_updated_generate_second_event(in_memory_adbot_srv
 
 
 @pytest.mark.asyncio
-async def test_check_user_data_updated_generate_events_several_users(in_memory_adbot_srv: AdBotServices):
+async def test_check_user_data_updated_generate_events_several_users(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     catched_events = []
     async def fake_subscriber_func_local(event: mb.AdBotEvent):
         catched_events.append(event)
 
-    adbot_srv.messagebus.subscribe([events.AdBotUserDataUpdated], fake_subscriber_func_local)
+    adbot_srv.messagebus.subscribe(
+        [events.AdBotUserDataUpdated], fake_subscriber_func_local
+    )
 
     user1 = await adbot_srv.create_user_by_telegram_data(111111, 'asd')
     await adbot_srv.set_subscription_state(user1.id, True)
@@ -1148,7 +1361,7 @@ async def test_check_user_data_updated_generate_events_several_users(in_memory_a
     uids.remove(catched_events[1].user_id)
 
 
-# ==============================================================================================
+# ========================================================================================
 # Main cycle
 
 @pytest.mark.asyncio
@@ -1179,7 +1392,9 @@ async def test_main_cycle_state_runned_after_run_cmd(in_memory_adbot_srv: AdBotS
 
 
 @pytest.mark.asyncio
-async def test_main_cycle_state_stopped_after_stop_cmd(in_memory_adbot_srv: AdBotServices):
+async def test_main_cycle_state_stopped_after_stop_cmd(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     async def fake_loop():
@@ -1201,7 +1416,9 @@ async def test_main_cycle_state_stopped_after_stop_cmd(in_memory_adbot_srv: AdBo
 
 
 @pytest.mark.asyncio
-async def test_main_cycle_generates_AdBotStop_event_after_stop_cmd(in_memory_adbot_srv: AdBotServices):
+async def test_main_cycle_generates_AdBotStop_event_after_stop_cmd(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     catched_events = []
@@ -1226,7 +1443,9 @@ async def test_main_cycle_generates_AdBotStop_event_after_stop_cmd(in_memory_adb
 
 
 @pytest.mark.asyncio
-async def test_main_cycle_reraises_and_stops_on_exception_in_loop(in_memory_adbot_srv: AdBotServices):
+async def test_main_cycle_reraises_and_stops_on_exception_in_loop(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     async def fake_loop(self):
@@ -1240,7 +1459,9 @@ async def test_main_cycle_reraises_and_stops_on_exception_in_loop(in_memory_adbo
 
 
 @pytest.mark.asyncio
-async def test_main_cycle_generatesAdBotStop_event_on_exception_in_loop(in_memory_adbot_srv: AdBotServices):
+async def test_main_cycle_generatesAdBotStop_event_on_exception_in_loop(
+    in_memory_adbot_srv: AdBotServices
+):
     adbot_srv = in_memory_adbot_srv
 
     catched_events = []

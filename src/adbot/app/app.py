@@ -3,8 +3,7 @@ import logging
 from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 
 
@@ -45,21 +44,32 @@ class AdBotApp(AsyncMixin):
         self._scheduler.start()
         done, pending = await asyncio.wait(
             [
-                asyncio.create_task(self._ad_bot_services.run(), name='ad_bot_services.run()'),
+                asyncio.create_task(
+                    self._ad_bot_services.run(), name='ad_bot_services.run()'
+                ),
                 asyncio.create_task(self._presentation.run(), name='_presentation.run()')
             ],
             return_when=asyncio.tasks.FIRST_COMPLETED
         )
         for task in done:
             if task.exception():
-                logger.error(f'Task `{task.get_name()}` finished with exception ({task.exception()}).')
+                logger.error(
+                    f'Task `{task.get_name()}` finished with exception ' \
+                        '({task.exception()}).'
+                )
             else:
                 logger.debug(f'Task `{task.get_name()}` finished.')
-        for task in pending:
-            try:
-                await asyncio.wait_for(task, 3)
-            except asyncio.TimeoutError:
-                logger.warning(f'Task `{task.get_name()}` didn`t finish at time, timeout occured. Terminate it.')
+        
+        tasks = asyncio.gather(*pending, return_exceptions=True)
+        try:
+            await asyncio.wait_for(tasks, timeout=5)
+        except asyncio.exceptions.TimeoutError:
+            logger.warning(f'Timeout occured. Some tasks will be cancelled')
+
+        try:
+            await tasks
+        except asyncio.exceptions.CancelledError:
+            pass
 
 
     async def stop(self, event: AdBotStop):
@@ -97,7 +107,8 @@ class AdBotApp(AsyncMixin):
             )
 
             self._scheduler.add_job(
-                tg_fetcher.fetch_messages, 'interval', seconds=CHECK_NEW_MESSAGES_INTERVAL_SEC
+                tg_fetcher.fetch_messages, 'interval',
+                seconds=CHECK_NEW_MESSAGES_INTERVAL_SEC
             )
 
             return tg_fetcher

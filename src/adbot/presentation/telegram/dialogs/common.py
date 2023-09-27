@@ -55,7 +55,10 @@ async def on_unexpected_input(
     context = manager.current_context()
     if context and hasattr(context, "state"):
         state = context.state
-    logger.warning(f'on_unexpected_input, user={message.from_user.id}, state="{state}", text="{message.text}"')
+    logger.warning(
+        f'on_unexpected_input, user={message.from_user.id}, state="{state}", ' \
+            'text="{message.text}"'
+    )
 
     await message.delete()
     manager.show_mode = ShowMode.EDIT

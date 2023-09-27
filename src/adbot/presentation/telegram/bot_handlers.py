@@ -81,7 +81,10 @@ async def dialog_refresh_cmd_handler(message: Message, dialog_manager: DialogMan
         dialog_manager.show_mode = ShowMode.EDIT
         await dialog_manager.show()
     except NoContextError:
-        logger.warning(f'`refresh_dialog` command, user={message.from_user.id}, Exception (NoContextError)')
+        logger.warning(
+            f'`refresh_dialog` command, user={message.from_user.id}, '\
+                'Exception (NoContextError)'
+        )
 
 
 async def on_db_error(event, dialog_manager: DialogManager):

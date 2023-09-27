@@ -18,7 +18,7 @@ from .common import (on_unexpected_input)
 
 logger = logging.getLogger(__name__)
 
-# ======================================================================================================
+# ========================================================================================
 # Settings dialog's states
 
 class HelpSG(StatesGroup):
@@ -27,22 +27,27 @@ class HelpSG(StatesGroup):
     dialog_closed = State()
 
 
-# ======================================================================================================
+# ========================================================================================
 # Main help window
 
 # help_html_text = Jinja(
 # """
-# This bot was disigned to help people track ads in russian-language Montenegro's telegram chats.
+# This bot was disigned to help people track ads in russian-language Montenegro's telegram
+# chats.
 
-# For example, you want to by bicycle. You can set keyword 'велосипед' (and don't forget to <u>enable forwarding</u>).
+# For example, you want to by bicycle. You can set keyword 'велосипед' (and don't forget
+# to <u>enable forwarding</u>).
 # After that bot will forward all the messages that contain the word 'велосипед' to you.
 # So, you don't have to spend time reading millions of messages in those chats.
 
-# This is an opensource project. You can setup it on your server and adjust it for your own needs.
+# This is an opensource project. You can setup it on your server and adjust it for your
+# own needs.
 
-# You can find more information at the project page on GIT: <a href="https://github.com/YuriiMotov/AdBot#readme">AdBot</a>
+# You can find more information at the project page on GIT:
+# <a href="https://github.com/YuriiMotov/AdBot#readme">AdBot</a>
 
-# To open settings menu type /menu or choose this item in the bot menu (in the bottom-left corner of the app).
+# To open settings menu type /menu or choose this item in the bot menu (in the bottom-left
+#  corner of the app).
                        
 # """
 # )
@@ -84,7 +89,7 @@ main_help_window = Window(
 
 
 
-# ======================================================================================================
+# ========================================================================================
 # `List of chats` window
 
 
@@ -117,7 +122,7 @@ chats_list_help_window = Window(
 
 
 
-# ======================================================================================================
+# ========================================================================================
 # Dialog closed window
 
 dialog_closed_window = Window(
@@ -126,7 +131,7 @@ dialog_closed_window = Window(
 )
 
 
-# ======================================================================================================
+# ========================================================================================
 # Dialog object
 
 async def on_dialog_close(result: Any, manager: DialogManager):
@@ -140,7 +145,10 @@ async def on_dialog_close(result: Any, manager: DialogManager):
 
         await ad_bot_srv.set_menu_closed_state(user.id, True)
     else:
-        logger.error(f'on_dialog_close. Event object class {event.__class__} doesn`t have attr "from_user"')
+        logger.error(
+            f'on_dialog_close. Event object class {event.__class__} doesn`t have attr ' \
+                '"from_user"'
+        )
 
     if isinstance(event, CallbackQuery):
         await event.message.delete()

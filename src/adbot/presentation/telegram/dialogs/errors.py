@@ -7,7 +7,7 @@ from aiogram_dialog.widgets.text import Const
 
 logger = logging.getLogger(__name__)
 
-# ======================================================================================================
+# ========================================================================================
 # Settings dialog's states
 
 class ErrorsSG(StatesGroup):
@@ -15,7 +15,7 @@ class ErrorsSG(StatesGroup):
 
 
 
-# ======================================================================================================
+# ========================================================================================
 # 'Service unavailable' window
 
 service_unavailable_error_window = Window(

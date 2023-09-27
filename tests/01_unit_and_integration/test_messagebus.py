@@ -20,10 +20,16 @@ def test_mb_add_subcriber_function():
 
     assert len(bus._subscribers) == 0
 
-    bus.subscribe([events.AdBotUserDataUpdated, events.AdBotInactivityTimeout], fake_subscriber_func)
+    bus.subscribe(
+        [events.AdBotUserDataUpdated, events.AdBotInactivityTimeout],
+        fake_subscriber_func
+    )
 
     assert len(bus._subscribers) == 1
-    events_set = {events.AdBotUserDataUpdated(1).__class__.__name__, events.AdBotInactivityTimeout(1).__class__.__name__}
+    events_set = {
+        events.AdBotUserDataUpdated(1).__class__.__name__,
+        events.AdBotInactivityTimeout(1).__class__.__name__
+    }
     assert bus._subscribers[fake_subscriber_func] == events_set
 
 
@@ -34,10 +40,16 @@ def test_mb_add_subcriber_method():
 
     fake_subscr_object = FakeSubscriber()
 
-    bus.subscribe([events.AdBotUserDataUpdated, events.AdBotInactivityTimeout], fake_subscr_object.handler)
+    bus.subscribe(
+        [events.AdBotUserDataUpdated, events.AdBotInactivityTimeout],
+        fake_subscr_object.handler
+    )
 
     assert len(bus._subscribers) == 1
-    events_set = {events.AdBotUserDataUpdated(1).__class__.__name__, events.AdBotInactivityTimeout(1).__class__.__name__}
+    events_set = {
+        events.AdBotUserDataUpdated(1).__class__.__name__,
+        events.AdBotInactivityTimeout(1).__class__.__name__
+    }
     assert bus._subscribers[list(bus._subscribers.keys())[0]] == events_set
 
 
@@ -49,7 +61,10 @@ def test_mb_add_three_subscribers():
 
     fake_subscr_object1 = FakeSubscriber()
 
-    bus.subscribe([events.AdBotUserDataUpdated, events.AdBotInactivityTimeout], fake_subscr_object1.handler)
+    bus.subscribe(
+        [events.AdBotUserDataUpdated, events.AdBotInactivityTimeout],
+        fake_subscr_object1.handler
+    )
 
     fake_subscr_object2 = FakeSubscriber()
 
@@ -58,7 +73,10 @@ def test_mb_add_three_subscribers():
     assert len(bus._subscribers) == 3
     events_set1 = {events.AdBotInactivityTimeout(1).__class__.__name__}
     assert bus._subscribers[fake_subscriber_func] == events_set1
-    events_set2 = {events.AdBotUserDataUpdated(1).__class__.__name__, events.AdBotInactivityTimeout(1).__class__.__name__}
+    events_set2 = {
+        events.AdBotUserDataUpdated(1).__class__.__name__,
+        events.AdBotInactivityTimeout(1).__class__.__name__
+    }
     assert bus._subscribers[list(bus._subscribers.keys())[1]] == events_set2
     events_set3 = {events.AdBotCriticalError(1).__class__.__name__}
     assert bus._subscribers[list(bus._subscribers.keys())[2]] == events_set3
@@ -106,7 +124,10 @@ async def test_post_events_method():
 
     fake_subscr_object1 = FakeSubscriber()
 
-    bus.subscribe([events.AdBotUserDataUpdated, events.AdBotInactivityTimeout], fake_subscr_object1.handler)
+    bus.subscribe(
+        [events.AdBotUserDataUpdated, events.AdBotInactivityTimeout],
+        fake_subscr_object1.handler
+    )
 
     event = events.AdBotInactivityTimeout(2)
     bus.post_event(event)
@@ -127,10 +148,17 @@ async def test_post_events_several_subscribers_several_events():
 
     fake_subscr_object1 = FakeSubscriber()
 
-    bus.subscribe([events.AdBotUserDataUpdated, events.AdBotInactivityTimeout], fake_subscr_object1.handler)
-    bus.subscribe([events.AdBotCriticalError, events.AdBotInactivityTimeout], fake_subscriber_func_local)
+    bus.subscribe(
+        [events.AdBotUserDataUpdated, events.AdBotInactivityTimeout],
+        fake_subscr_object1.handler
+    )
+    bus.subscribe(
+        [events.AdBotCriticalError, events.AdBotInactivityTimeout],
+        fake_subscriber_func_local
+    )
 
-    event1 = events.AdBotInactivityTimeout(2)       # fake_subscr_object1, fake_subscriber_func_local
+    event1 = events.AdBotInactivityTimeout(2)       # fake_subscr_object1,
+                                                    #    fake_subscriber_func_local
     event2 = events.AdBotUserDataUpdated(2)         # fake_subscr_object1
     event3 = events.AdBotCriticalError('critical')  # fake_subscriber_func_local
 
@@ -157,10 +185,17 @@ async def test_post_events_several_subscribers_with_fault_in_one_handler():
 
     fake_subscr_object1 = FakeSubscriber()
 
-    bus.subscribe([events.AdBotUserDataUpdated, events.AdBotInactivityTimeout], fake_subscr_object1.handler)
-    bus.subscribe([events.AdBotCriticalError, events.AdBotInactivityTimeout], fake_subscriber_func_local)
+    bus.subscribe(
+        [events.AdBotUserDataUpdated, events.AdBotInactivityTimeout],
+        fake_subscr_object1.handler
+    )
+    bus.subscribe(
+        [events.AdBotCriticalError, events.AdBotInactivityTimeout],
+        fake_subscriber_func_local
+    )
 
-    event1 = events.AdBotInactivityTimeout(2)       # fake_subscr_object1, fake_subscriber_func_local
+    event1 = events.AdBotInactivityTimeout(2)       # fake_subscr_object1,
+                                                    #   fake_subscriber_func_local
     event2 = events.AdBotUserDataUpdated(2)         # fake_subscr_object1
     event3 = events.AdBotCriticalError('critical')  # fake_subscriber_func_local
 

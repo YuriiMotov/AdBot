@@ -25,6 +25,8 @@ class PresentationInterface(ABC):
         raise NotImplementedError
     
     @abstractmethod
-    async def user_message_forward_request_handler(self, event: events.AdBotMessageForwardRequest):
+    async def user_message_forward_request_handler(
+        self, event: events.AdBotMessageForwardRequest
+    ):
         raise NotImplementedError
     

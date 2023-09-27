@@ -1,10 +1,13 @@
+import asyncio
 from datetime import datetime
 import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.filters import and_f, Command, ExceptionTypeFilter
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
-from aiogram.types import Chat, User, Message, Update, BotCommand, BotCommandScopeAllPrivateChats
+from aiogram.types import (
+    Chat, User, Message, Update, BotCommand, BotCommandScopeAllPrivateChats
+)
 from aiogram_dialog import setup_dialogs
 from aiogram_dialog.api.exceptions import UnknownIntent, UnknownState
 from redis.asyncio.client import Redis
@@ -124,7 +127,8 @@ class TGBot(PresentationInterface):
 
 
     async def stop_event_handler(self, event: events.AdBotStop):
-        await self._dp.stop_polling()
+        if self._dp._running_lock.locked():
+            await self._dp.stop_polling()
 
 
     async def user_inactivity_timeout_handler(self, event: events.AdBotInactivityTimeout):
@@ -143,7 +147,9 @@ class TGBot(PresentationInterface):
         await self._send_bot_cmd('/refresh_dialog', user.telegram_id)
     
 
-    async def user_message_forward_request_handler(self, event: events.AdBotMessageForwardRequest):
+    async def user_message_forward_request_handler(
+        self, event: events.AdBotMessageForwardRequest
+    ):
         await self._bot.send_message(event.telegram_id, event.message_url)
     
 

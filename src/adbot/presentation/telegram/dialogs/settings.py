@@ -24,13 +24,13 @@ from aiogram_dialog.widgets.input import MessageInput
 from adbot.domain.services import AdBotServices
 from adbot.domain import models
 from .common import (
-    data_getter, get_user_data, on_unexpected_input, set_error_msg, on_menu_navigate_click,
+    data_getter, get_user_data, on_unexpected_input, on_menu_navigate_click,
     ERROR_MSG_FORMAT
 )
 
 logger = logging.getLogger(__name__)
 
-# ======================================================================================================
+# ========================================================================================
 # Settings dialog's states
 
 class SettingsSG(StatesGroup):
@@ -40,7 +40,7 @@ class SettingsSG(StatesGroup):
     dialog_closed = State()
 
 
-# ======================================================================================================
+# ========================================================================================
 # Settings main window
 
 async def on_subscription_toggle_click(
@@ -120,7 +120,7 @@ settings_window = Window(
 )
 
 
-# ======================================================================================================
+# ========================================================================================
 # Keywords management window
 
 async def on_keyword_add_input(
@@ -155,8 +155,9 @@ manage_keywords_window = Window(
     Format(
         "\n" \
             "<b>Attention!</b> \n" \
-            "The amount of keywords in your list is limited by {user.keywords_limit}. \n" \
-            "<u>To add new keywords</u> you have to <u>remove</u> some existing keywords from your list.",
+            "The amount of keywords in your list is limited by {user.keywords_limit}.\n" \
+            "<u>To add new keywords</u> you have to <u>remove</u> some existing " \
+            "keywords from your list.",
         when=(F["user"].keywords.len() >= F["user"].keywords_limit)
     ),
     Const(
@@ -187,7 +188,7 @@ manage_keywords_window = Window(
 )
 
 
-# ======================================================================================================
+# ========================================================================================
 # Keyword removing window
 
 async def on_remove_kw_selected(
@@ -242,7 +243,7 @@ remove_keyword_window = Window(
 )
 
 
-# ======================================================================================================
+# ========================================================================================
 # 'Dialog closed' window
 
 dialog_closed_window = Window(
@@ -276,7 +277,7 @@ dialog_closed_window = Window(
 )
 
 
-# ======================================================================================================
+# ========================================================================================
 # Dialog object
 
 async def on_dialog_close(result: Any, manager: DialogManager):
@@ -289,7 +290,10 @@ async def on_dialog_close(result: Any, manager: DialogManager):
         user = await ad_bot_srv.get_user_by_telegram_id(event.from_user.id)
         await ad_bot_srv.set_menu_closed_state(user.id, True)
     else:
-        logger.error(f'on_dialog_close. Event object class {event.__class__} doesn`t have attr "from_user"')
+        logger.error(
+            f'on_dialog_close. Event object class {event.__class__} doesn`t have attr ' \
+                '"from_user"'
+        )
 
     manager.show_mode = ShowMode.EDIT
     await manager.switch_to(SettingsSG.dialog_closed)
