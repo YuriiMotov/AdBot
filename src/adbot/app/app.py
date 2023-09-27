@@ -43,13 +43,24 @@ class AdBotApp(AsyncMixin):
 
     async def run(self):
         self._scheduler.start()
-        await asyncio.wait(
+        done, pending = await asyncio.wait(
             [
-                asyncio.create_task(self._ad_bot_services.run()),
-                asyncio.create_task(self._presentation.run())
+                asyncio.create_task(self._ad_bot_services.run(), name='ad_bot_services.run()'),
+                asyncio.create_task(self._presentation.run(), name='_presentation.run()')
             ],
             return_when=asyncio.tasks.FIRST_COMPLETED
         )
+        for task in done:
+            if task.exception():
+                logger.error(f'Task `{task.get_name()}` finished with exception ({task.exception()}).')
+            else:
+                logger.debug(f'Task `{task.get_name()}` finished.')
+        for task in pending:
+            try:
+                await asyncio.wait_for(task, 3)
+            except asyncio.TimeoutError:
+                logger.warning(f'Task `{task.get_name()}` didn`t finish at time, timeout occured. Terminate it.')
+
 
     async def stop(self, event: AdBotStop):
         self._scheduler.shutdown()

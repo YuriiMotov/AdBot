@@ -25,10 +25,8 @@ from adbot.presentation.telegram.filters import ChatName, SenderId
 
 async def _sessionmaker(url: str) -> async_sessionmaker:
     engine = create_async_engine(
-        url, pool_pre_ping=True, poolclass=QueuePool,
-        pool_size=5,
-        max_overflow=-1, pool_timeout=0.5,
-        # isolation_level=''
+        url, pool_pre_ping=True,
+        pool_size=5, max_overflow=10
     )
 
     async with engine.begin() as conn:
