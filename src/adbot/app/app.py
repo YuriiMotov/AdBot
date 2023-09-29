@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 
 from adbot.domain.events import AdBotStop
+from adbot.domain import models
 from adbot.domain.services import AdBotServices
 from adbot.presentation.telegram.tg_bot import TGBot
 from adbot.presentation.presentation_interface import PresentationInterface
@@ -77,7 +78,9 @@ class AdBotApp(AsyncMixin):
 
 
     async def _db_connect(self) -> sessionmaker:
-        engine = create_async_engine(config.DB_DNS, pool_pre_ping=True)
+        engine = create_async_engine(config.get_db_dsn(), pool_pre_ping=True)
+        async with engine.begin() as conn:
+            await conn.run_sync(models.Base.metadata.create_all)
         return async_sessionmaker(bind=engine, expire_on_commit=False)
 
     async def _create_ad_bot_services(self, db_pool: sessionmaker) -> AdBotServices:

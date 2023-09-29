@@ -50,8 +50,8 @@ async def in_memory_db_sessionmaker():
 
 @pytest_asyncio.fixture    
 async def config_url_sessionmaker() -> async_sessionmaker:
-    return await _sessionmaker(config.DB_DNS)
-
+    assert config.DB_TYPE in ('PG', 'SQLITE')
+    return await _sessionmaker(config.get_db_dsn())
 
 
 @pytest_asyncio.fixture

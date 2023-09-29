@@ -52,7 +52,6 @@ Now the messages will be forwarded to the user.
 ![](/resources/message-received.png "Message received")
 
 
-
 ## Future plans
  - [DONE] switch to an asynchronous database
  - add more e2e tests
@@ -61,3 +60,11 @@ Now the messages will be forwarded to the user.
  - notifying the administrator of critical errors
  - create FastAPI and Flask interfaces (just to practice using these libraries)
  - create other types of message collectors (from Facebook groups and other web sources)
+
+
+
+# How to run in docker
+ - Download to local system (`git clone https://github.com/YuriiMotov/AdBot.git`)
+ - create `.env` file and fill it (use `.env_example` as an example)
+ - create docker image (execute command `sudo docker build -t adbot .`)
+ - run system (command `sudo docker compose up -d`)

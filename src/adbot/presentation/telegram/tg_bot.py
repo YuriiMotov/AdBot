@@ -96,7 +96,7 @@ class TGBot(PresentationInterface):
 
     def _create_dp(self, redis_db: int) -> Dispatcher:
         storage = RedisStorage(
-            redis=Redis(host='localhost', port=6379, db=redis_db),
+            redis=Redis(host='redis', port=6379, db=redis_db),
             key_builder=DefaultKeyBuilder(with_destiny=True)
         )
         return Dispatcher(storage=storage, ad_bot_srv=self._ad_bot_srv)
