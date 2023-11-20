@@ -90,6 +90,8 @@ class AdBotApp(AsyncMixin):
         tg_bot = TGBot(
             ad_bot_srv=ad_bot_services,
             bot_token=config.BOT_TOKEN.get_secret_value(),
+            redis_host=config.REDIS_HOST,
+            redis_port=config.REDIS_PORT,
             redis_db=config.REDIS_DB,
             admin_id=config.ADMIN_ID
         )

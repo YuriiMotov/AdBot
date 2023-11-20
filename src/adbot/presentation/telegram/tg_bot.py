@@ -24,14 +24,15 @@ logger = logging.getLogger(__name__)
 
 class TGBot(PresentationInterface):
     def __init__(
-        self, ad_bot_srv: AdBotServices, bot_token: str, redis_db: int,
+        self, ad_bot_srv: AdBotServices, bot_token: str,
+        redis_host: str, redis_port: int, redis_db: int,
         admin_id: int, message_manager=None
     ) -> None:
         
         super().__init__(ad_bot_srv)
         
         self._bot = self._create_bot(bot_token)
-        self._dp = self._create_dp(redis_db)
+        self._dp = self._create_dp(redis_host, redis_port, redis_db)
 
         # Register command handlers
         self._dp.message.register(
@@ -94,9 +95,9 @@ class TGBot(PresentationInterface):
         return Bot(token=bot_token, parse_mode='HTML')
 
 
-    def _create_dp(self, redis_db: int) -> Dispatcher:
+    def _create_dp(self, redis_host: str, redis_port: int, redis_db: int) -> Dispatcher:
         storage = RedisStorage(
-            redis=Redis(host='redis', port=6379, db=redis_db),
+            redis=Redis(host=redis_host, port=redis_port, db=redis_db),
             key_builder=DefaultKeyBuilder(with_destiny=True)
         )
         return Dispatcher(storage=storage, ad_bot_srv=self._ad_bot_srv)

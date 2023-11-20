@@ -26,7 +26,11 @@ class Settings(BaseSettings):
     SQLITE_DB_DSN: str = 'sqlite+aiosqlite:///database.db'
 
     # Aiogram bot config
+    REDIS_HOST: str = 'redis'
+    REDIS_PORT: int = 6379
     REDIS_DB: int
+
+
     BOT_TOKEN: SecretStr
 
     # Telethon config    
