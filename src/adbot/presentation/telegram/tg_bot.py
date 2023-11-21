@@ -3,6 +3,7 @@ from datetime import datetime
 import logging
 
 from aiogram import Bot, Dispatcher
+from aiogram.exceptions import TelegramForbiddenError
 from aiogram.filters import and_f, Command, ExceptionTypeFilter
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
 from aiogram.types import (
@@ -151,8 +152,16 @@ class TGBot(PresentationInterface):
     async def user_message_forward_request_handler(
         self, event: events.AdBotMessageForwardRequest
     ):
-        await self._bot.send_message(event.telegram_id, event.message_url)
-    
+        try:
+            await self._bot.send_message(event.telegram_id, event.message_url)
+        except TelegramForbiddenError as e:
+            if e.message.find('bot was blocked by the user') >= 0:
+                logger.warning(f'Bot was blocked by user {event.telegram_id}. Unsubscribe user')
+                await self._ad_bot_srv.set_subscription_state(event.user_id, False)
+                await self._ad_bot_srv.set_menu_closed_state(event.user_id, True)
+            else:
+                raise
+
 
     async def _send_bot_cmd(self, cmd: str, user_tg_id: int):
         """
