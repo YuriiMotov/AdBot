@@ -216,6 +216,7 @@ async def test_subcription_toogle_click_shows_error_msg_on_sql_error(env: Env):
 @pytest.mark.asyncio
 async def test_show_keywords(env: Env):
     KEYWORDS = ['AbRaCaDaBrA', 'KEYWORD']
+    KEYWORDS_LOWER = [kw.lower() for kw in KEYWORDS]
     await env.ad_bot_srv.create_user_by_telegram_data(
         env.client.user.id, env.client.user.full_name
     )
@@ -225,13 +226,14 @@ async def test_show_keywords(env: Env):
 
     await env.client.send('/menu')
     message = env.message_manager.one_message()
-    assert message.text.find(KEYWORDS[0]) > 0
-    assert message.text.find(KEYWORDS[1]) > 0
+    assert message.text.find(KEYWORDS_LOWER[0]) > 0
+    assert message.text.find(KEYWORDS_LOWER[1]) > 0
 
 
 @pytest.mark.asyncio
 async def test_add_keywords(env: Env):
     KEYWORDS = ['AbRaCaDaBrA', 'KEYWORD']
+    KEYWORDS_LOWER = [kw.lower() for kw in KEYWORDS]
     await env.client.send('/menu')
     message = env.message_manager.one_message()
     callback_id = await env.client.click(
@@ -242,13 +244,14 @@ async def test_add_keywords(env: Env):
     env.message_manager.reset_history()
     await env.client.send(KEYWORDS[1])
     message = env.message_manager.one_message()
-    assert message.text.find(KEYWORDS[0]) > 0
-    assert message.text.find(KEYWORDS[1]) > 0
+    assert message.text.find(KEYWORDS_LOWER[0]) > 0
+    assert message.text.find(KEYWORDS_LOWER[1]) > 0
 
 
 @pytest.mark.asyncio
 async def test_remove_keywords(env: Env):
     KEYWORDS = ['AbRaCaDaBrA', 'KEYWORD']
+    KEYWORDS_LOWER = [kw.lower() for kw in KEYWORDS]
 
     # Create user and add two keywords
     await env.ad_bot_srv.create_user_by_telegram_data(
@@ -277,7 +280,7 @@ async def test_remove_keywords(env: Env):
     # Remove first keyword and navigate to 'Manage keywords'
     # Check that first keyword is absent, but second is exist
     callback_id = await env.client.click(
-        message, InlineButtonTextLocator(f'❌ {KEYWORDS[0]}'),
+        message, InlineButtonTextLocator(f'❌ {KEYWORDS_LOWER[0]}'),
     )
     env.message_manager.assert_answered(callback_id)
     env.message_manager.reset_history()
@@ -286,8 +289,8 @@ async def test_remove_keywords(env: Env):
     )
     env.message_manager.assert_answered(callback_id)
     message = env.message_manager.one_message()
-    assert message.text.find(KEYWORDS[0]) < 0
-    assert message.text.find(KEYWORDS[1]) > 0
+    assert message.text.find(KEYWORDS_LOWER[0]) < 0
+    assert message.text.find(KEYWORDS_LOWER[1]) > 0
 
 
 @pytest.mark.asyncio

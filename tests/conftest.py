@@ -89,11 +89,17 @@ def env(in_memory_adbot_srv: AdBotServices) -> Env:
 
     class TestableTgBotPresentation(TGBot):
         def __init__(
-            self, ad_bot_srv: AdBotServices, bot_token: str, redis_db: int,
-            admin_id: int, message_manager=None
+            self, ad_bot_srv: AdBotServices, bot_token: str, admin_id: int,
+            message_manager=None
         ) -> None:
             super().__init__(
-                ad_bot_srv, bot_token, redis_db, admin_id, message_manager
+                ad_bot_srv=ad_bot_srv,
+                bot_token=bot_token,
+                redis_host='',
+                redis_port=0,
+                redis_db=0,
+                admin_id=admin_id,
+                message_manager=message_manager
             )
             self._send_bot_cmd = AsyncMock()
             self._dp.start_polling = AsyncMock()
@@ -101,15 +107,20 @@ def env(in_memory_adbot_srv: AdBotServices) -> Env:
 
         def _create_bot(self, bot_token: str):
             return AsyncMock(Bot)
-        
-        def _create_dp(self: TGBot, redis_db: int):
+
+        def _create_dp(
+            self, redis_host: str, redis_port: int, redis_db: int
+        ) -> Dispatcher:
             return Dispatcher(ad_bot_srv=self._ad_bot_srv)
 
     e = Env()
     e.ad_bot_srv = in_memory_adbot_srv
     e.message_manager = MockMessageManager()
     e.tg_bot = TestableTgBotPresentation(
-        in_memory_adbot_srv, '', 0, e.admin_id, e.message_manager
+        ad_bot_srv=in_memory_adbot_srv,
+        bot_token='',
+        admin_id=e.admin_id,
+        message_manager=e.message_manager
     )
 
     tg_user_id = random.randint(e.admin_id + 1, e.admin_id * 10)
