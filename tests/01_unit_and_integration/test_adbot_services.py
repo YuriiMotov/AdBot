@@ -537,6 +537,22 @@ async def test_add_keyword(in_memory_adbot_srv: AdBotServices):
 
 
 @pytest.mark.asyncio
+async def test_add_keyword_case_insensitive(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    user = await adbot_srv.create_user_by_telegram_data(
+        telegram_id=123456789, telegram_name='asd'
+    )
+
+    res = await adbot_srv.add_keyword(user.id, 'New_KeyWord')
+    assert res == True
+
+    user = await adbot_srv.get_user_by_telegram_id(123456789)
+    assert len(user.keywords) == 1
+    assert user.keywords[0].word == 'new_keyword'
+
+
+@pytest.mark.asyncio
 async def test_add_keyword_raises_exception_on_sql_error(
     in_memory_adbot_srv: AdBotServices
 ):
@@ -978,6 +994,39 @@ async def test_forward_messages(in_memory_adbot_srv: AdBotServices):
     expected_messages.remove(catched_events[0].message_text)
     assert catched_events[1].message_text in expected_messages
     expected_messages.remove(catched_events[1].message_text)
+    assert len(expected_messages) == 0
+
+
+@pytest.mark.asyncio
+async def test_forward_messages_case_insensitive(in_memory_adbot_srv: AdBotServices):
+    adbot_srv = in_memory_adbot_srv
+
+    catched_events = []
+    async def fake_subscriber_func_local(event: mb.AdBotEvent):
+        catched_events.append(event)
+
+    adbot_srv.messagebus.subscribe(
+        [events.AdBotMessageForwardRequest], fake_subscriber_func_local
+    )
+
+    await adbot_srv.add_message(11, 22, 'Apple Banana Orange', 'https://t.me/c/123/456')
+
+    user = await adbot_srv.create_user_by_telegram_data(11111, 'asd')
+    await adbot_srv.set_subscription_state(user.id, True)
+    await adbot_srv.add_keyword(user.id, 'apple')
+    await adbot_srv.add_keyword(user.id, 'bicycle')
+    await adbot_srv._process_messages()
+
+    await adbot_srv._forward_messages()
+    await asyncio.sleep(0.00000001)     # Give time to process asyncio tasks
+
+    expected_messages = {
+        'Apple Banana Orange'
+    }
+
+    assert len(catched_events) == 1
+    assert catched_events[0].message_text in expected_messages
+    expected_messages.remove(catched_events[0].message_text)
     assert len(expected_messages) == 0
 
 
