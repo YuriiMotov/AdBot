@@ -308,6 +308,7 @@ class AdBotServices(AsyncMixin):
                 `AdBotExceptionUserNotExist` if user doesn`t exist
                 `AdBotExceptionSQL` exception on DB error
         """
+        keyword = keyword.lower()
         retries = 5
         try:
             while retries:
