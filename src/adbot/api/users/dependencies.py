@@ -13,8 +13,6 @@ async def get_user_dep(
     user_uuid: UUID,
     session: Annotated[AsyncSession, Depends(get_async_session)]
 ) -> UserInDB:
-
-    HTTPException(400, "dfgxfdgsfg")
     user = await session.get(UserInDB, user_uuid)
     if user is None:
         raise HTTPException(
