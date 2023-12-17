@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "adbotdev"
+version = "0.1.0"
+description = ""
+authors = ["Yurii <motovyuri@ya.ru>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = {extras = ["all"], version = "^0.105.0"}
+sqlalchemy = "^2.0.23"
+sqlmodel = "^0.0.14"
+psycopg = {extras = ["binary"], version = "^3.1.15"}
+mypy = "^1.7.1"
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.3"
+pytest-asyncio = "^0.23.2"
+aiosqlite = "^0.19.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
