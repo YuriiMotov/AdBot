@@ -1,9 +1,10 @@
-from typing import Annotated
+from typing import Annotated, Optional, Sequence
 from uuid import UUID 
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy import select, or_
 from sqlalchemy.exc import IntegrityError
+from sqlmodel import col
 
 from database import AsyncSession, get_async_session
 from models.user import UserInDB, UserCreate, UserPatch
@@ -30,13 +31,13 @@ async def create_user_dep(
 
     # Checking whether `uuid`, `name` or `telegram_id' is already used
     conditions = [
-        UserInDB.uuid == user_uuid,
-        UserInDB.name == user_data.name
+        col(UserInDB.uuid) == user_uuid,
+        col(UserInDB.name) == user_data.name
     ]
     if user_data.telegram_id is not None:
-        conditions.append(UserInDB.telegram_id == user_data.telegram_id)
+        conditions.append(col(UserInDB.telegram_id) == user_data.telegram_id)
 
-    st = select(UserInDB).where(or_(*conditions))
+    st = select(UserInDB).where(or_(False, *conditions))
     users = (await session.scalars(st)).all()
     if users:
         errors = []
@@ -80,13 +81,13 @@ async def update_user_dep(
     update_data = user_data.model_dump(exclude_unset=True)
     conditions = []
     if "name" in update_data.keys():
-        conditions.append(UserInDB.name == user_data.name)
+        conditions.append(col(UserInDB.name) == user_data.name)
     if "telegram_id" in update_data.keys():
         if user_data.telegram_id is not None:
-            conditions.append(UserInDB.telegram_id == user_data.telegram_id)
+            conditions.append(col(UserInDB.telegram_id) == user_data.telegram_id)
     if conditions:
-        st = select(UserInDB).where(UserInDB.uuid != user_uuid).where(or_(*conditions))
-        users = (await session.scalars(st)).all()
+        st = select(UserInDB).where(col(UserInDB.uuid) != user_uuid).where(or_(*conditions))
+        users: Sequence[UserInDB] = (await session.scalars(st)).all()
         if users:
             errors = []
             for user in users:
@@ -101,17 +102,17 @@ async def update_user_dep(
             )
 
     # Updating user data
-    user = await session.get(UserInDB, user_uuid)
-    if user is None:
+    user_to_update: Optional[UserInDB] = await session.get(UserInDB, user_uuid)
+    if user_to_update is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"User with uuid={user_uuid} not found"
         )
     if len(update_data) == 0:   # Nothing to update
-        return user
+        return user_to_update
     
     for attr, value in update_data.items():
-        setattr(user, attr, value)
+        setattr(user_to_update, attr, value)
     try:
         await session.commit()
     except IntegrityError as e:
@@ -119,4 +120,4 @@ async def update_user_dep(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error occured. Try again"
         )
-    return user
+    return user_to_update
