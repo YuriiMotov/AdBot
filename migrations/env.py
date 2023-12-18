@@ -8,7 +8,8 @@ from alembic import context
 
 sys.path.append(os.path.join(sys.path[0], 'src'))
 
-from models import SQLModel, user
+from models import user, keyword
+from sqlmodel import SQLModel
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

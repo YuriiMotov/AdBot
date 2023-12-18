@@ -1,9 +1,12 @@
 import random
+from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy import func, select, insert
+from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlmodel import col
 
+from models.keyword import KeywordInDB
 from models.user import UserInDB
 
 
@@ -48,3 +51,41 @@ async def create_user(
         await session.commit()
 
     return user
+
+
+async def create_keywords_list(
+    async_session_maker: async_sessionmaker,
+    *,
+    count: int = 10,
+    prefix: Optional[str] = None
+) -> list[KeywordInDB]:
+    if prefix is None:
+        prefix = f"{uuid4()}_"
+
+    session: AsyncSession
+    async with async_session_maker() as session:
+        res = await session.scalars(
+            insert(KeywordInDB).returning(KeywordInDB),
+            [{"word":f"{prefix}{i}"} for i in range(count)]
+        )
+        await session.commit()
+    return res.all()
+
+
+async def get_keywords_count_by_filter(
+    async_session_maker: async_sessionmaker,
+    *,
+    filter: Optional[str] = None,
+    strict: bool = True
+) -> int:
+    session: AsyncSession
+    async with async_session_maker() as session:
+        st = select(func.count(KeywordInDB.id))
+        if filter:
+            if strict:
+                st = st.where(KeywordInDB.word == filter)
+            else:
+                st = st.where(col(KeywordInDB.word).like(filter))
+        return await session.scalar(st)
+
+                                   

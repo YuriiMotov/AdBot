@@ -1,3 +1,4 @@
+import asyncio
 from typing import AsyncGenerator
 
 from fastapi.testclient import TestClient
