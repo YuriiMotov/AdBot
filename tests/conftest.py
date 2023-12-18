@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 
 from adbot.api.main import app
 from database import get_async_session
-from models import SQLModel
+from sqlmodel import SQLModel
 
 
 @pytest.fixture(scope="session")
