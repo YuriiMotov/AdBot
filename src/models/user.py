@@ -7,7 +7,7 @@ from common_types import Lang
 
 
 class UserBase(SQLModel):
-    name: str = Field(index=True, unique=True, max_length=50)
+    name: str = Field(index=True, unique=True, min_length=2, max_length=50)
     telegram_id: Optional[int] = Field(nullable=True, default=None, unique=True, index=True)
 
 
