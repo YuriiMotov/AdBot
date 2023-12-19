@@ -4,7 +4,9 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from tests.helpers import create_keywords_list, get_keywords_count_by_filter
+from tests.helpers import (
+    ResStat, create_keywords_list, get_keywords_count_by_filter, delete_all_keywords, get_multimage_results
+)
 
 pytestmark = pytest.mark.asyncio(scope="module")
 
@@ -62,6 +64,21 @@ async def test_keywords_get_by_filter_empty_res(
     assert len(resp_data["results"]) == 0
 
 
+async def test_keywords_get_by_filter_none_filter_empty_res(
+    async_client: TestClient,
+    async_session_maker: async_sessionmaker,
+):
+    await delete_all_keywords(async_session_maker)
+
+    resp = await async_client.get(f"/keywords/")
+    assert resp.status_code == 200
+    resp_data = resp.json()
+    assert resp_data["total_results"] == 0
+    assert resp_data["total_pages"] == 1
+    assert resp_data["current_page"] == 1
+    assert len(resp_data["results"]) == 0
+
+
 @pytest.mark.parametrize("limit", [None, 1, 2, 100])
 async def test_keywords_get_multipage_default_limit(
     async_client: TestClient,
@@ -73,32 +90,15 @@ async def test_keywords_get_multipage_default_limit(
     keywords = await create_keywords_list(async_session_maker, count=40)
     keywords_total = await get_keywords_count_by_filter(async_session_maker)
 
-    url = f"/keywords/"
-    if limit:
-        url += f"?limit={limit}"
-    resp = await async_client.get(url)
-    assert resp.status_code == 200
+    resp_stat = ResStat()
+    keywords_results = get_multimage_results(
+        async_client=async_client,
+        base_url="/keywords/",
+        resp_stat=resp_stat,
+        limit=limit
+    )
 
-    resp_data = resp.json()
-    assert resp_data["total_results"] == keywords_total
-    assert resp_data["current_page"] == 1
-
-    unique_words = {keyword["word"] for keyword in resp_data["results"]}
-    
-    total_pages = resp_data["total_pages"]
-    assert total_pages > 1
-    
-    for page in range(2, total_pages + 1):
-        url = f"/keywords/?page={page}"
-        if limit:
-            url += f"&limit={limit}"
-        resp = await async_client.get(url)
-        assert resp.status_code == 200
-        resp_data = resp.json()
-        page_unique_words = {keyword["word"] for keyword in resp_data["results"]}
-        unique_words.update(page_unique_words)
+    unique_words = {keyword["word"] async for keyword in keywords_results}
     
     assert len(unique_words) == keywords_total
-
-
 

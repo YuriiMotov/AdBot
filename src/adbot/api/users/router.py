@@ -3,8 +3,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from models.user import UserInDB, UserOutput
+from models.keyword import KeywordInDB, KeywordOutput
 from .dependencies import get_user_dep, create_user_dep, update_user_dep
-
+from ..keywords.dependencies import get_keywords_by_user_dep
+from ..pagination import Paginated
 
 
 users_router = APIRouter(
@@ -12,6 +14,8 @@ users_router = APIRouter(
     tags=["users"]
 )
 
+
+# `User` endpoints
 
 @users_router.get(
     "/{user_uuid}/",
@@ -43,7 +47,6 @@ async def create_user(
     return user
 
 
-
 @users_router.patch(
     "/{user_uuid}/",
     response_model=UserOutput,
@@ -57,4 +60,18 @@ async def update_user(
 ):
     """ Update user data """
     return user
+
+
+# `User keywords` endpoints
+
+@users_router.get(
+    "/{user_uuid}/keywords/",
+    response_model=Paginated[KeywordOutput]
+)
+async def get_user_keywords(
+
+    keywords: Annotated[KeywordInDB, Depends(get_keywords_by_user_dep)]
+):
+    """ Get user's keyword list """
+    return keywords
 

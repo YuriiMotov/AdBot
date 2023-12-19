@@ -1,9 +1,11 @@
 from typing import Optional
 import uuid as uuid_pkg
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, Relationship
 
 from common_types import Lang
+from models.users_keywords_links import UserKeywordLink
+from models.keyword import KeywordInDB
 
 
 class UserBase(SQLModel):
@@ -24,6 +26,7 @@ class User(UserBase):
 
 class UserInDB(User, table=True):
     __tablename__ = "users"
+    keywords: list[KeywordInDB] = Relationship(link_model=UserKeywordLink)
 
 
 class UserCreate(UserBase):

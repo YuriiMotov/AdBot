@@ -1,11 +1,14 @@
 from math import ceil
 from typing import Annotated, Optional, Tuple
+from uuid import UUID
 
 from fastapi import Depends, HTTPException, Query, status
 from sqlalchemy import select, func
 
 from database import AsyncSession, get_async_session
-from models.keyword import KeywordInDB, KeywordCreate
+from models.keyword import KeywordInDB, KeywordCreate, KeywordOutput
+from models.user import UserInDB
+from models.users_keywords_links import UserKeywordLink
 from ..pagination import Pagination, Paginated
 
 
@@ -25,28 +28,44 @@ async def get_keyword_by_id_dep(
 async def get_keywords_dep(
     session: Annotated[AsyncSession, Depends(get_async_session)],
     pagination: Annotated[Pagination, Depends()],
-    word: Annotated[Optional[str], Query()] = None
-) -> Paginated[KeywordInDB]:
+    word: Annotated[Optional[str], Query()] = None,
+    user_uuid: Annotated[Optional[str], Query()] = None
+) -> Paginated[KeywordOutput]:
     if word:
         st = select(KeywordInDB).where(KeywordInDB.word == word)
+        if user_uuid:
+            st = st.select_from(UserKeywordLink) \
+                    .join(KeywordInDB) \
+                    .where(UserKeywordLink.user_uuid == user_uuid)
         keyword = await session.scalar(st)
         if keyword:
-            keywords = [keyword]
+            keywords = [KeywordOutput.model_validate(keyword)]
         else:
             keywords = []
-        res = Paginated(total_results=len(keywords), total_pages=1, current_page=1, results=keywords)
+        res = Paginated(
+            total_results=len(keywords), total_pages=1, current_page=1, results=keywords
+        )
         return res
     else:
         total_st = select(func.count(KeywordInDB.id))
+        if user_uuid:
+            total_st = total_st.select_from(UserKeywordLink) \
+                            .join(KeywordInDB) \
+                            .where(UserKeywordLink.user_uuid == user_uuid)
         total_results = await session.scalar(total_st)
+
         offset = (pagination.page - 1) * pagination.limit
         results_st = select(KeywordInDB).offset(offset).limit(pagination.limit)
-        keywords = (await session.scalars(results_st)).all()
+        if user_uuid:
+            results_st = results_st.select_from(UserKeywordLink) \
+                            .join(KeywordInDB) \
+                            .where(UserKeywordLink.user_uuid == user_uuid)
+        keywords = await session.scalars(results_st)
         res = Paginated(
             total_results=total_results,
-            total_pages=ceil(total_results / pagination.limit),
+            total_pages=max(1, ceil(total_results / pagination.limit)),
             current_page=pagination.page,
-            results=keywords
+            results=[KeywordOutput.model_validate(kw) for kw in keywords.all()]
         )
         return res
 
@@ -73,3 +92,16 @@ async def create_keyword_dep(
     return (keyword, True)
 
 
+async def get_keywords_by_user_dep(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    pagination: Annotated[Pagination, Depends()],
+    user_uuid: UUID,
+    word: Annotated[Optional[str], Query()] = None,
+) -> Paginated[KeywordOutput]:
+
+    return await get_keywords_dep(
+        session=session,
+        pagination=pagination,
+        user_uuid=user_uuid,
+        word=word
+    )

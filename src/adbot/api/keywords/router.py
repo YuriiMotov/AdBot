@@ -16,7 +16,7 @@ keywords_router = APIRouter(
 
 @keywords_router.get(
     "/",
-    response_model=Paginated[KeywordOutput,]
+    response_model=Paginated[KeywordOutput]
 )
 async def get_keywords(
     keywords: Annotated[KeywordInDB, Depends(get_keywords_dep)]
