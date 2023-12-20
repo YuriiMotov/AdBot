@@ -10,6 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from adbot.api.users.router import users_router
 from adbot.api.keywords.router import keywords_router
+from adbot.api.categories.router import categories_router
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ app = FastAPI(
 
 app.include_router(users_router)
 app.include_router(keywords_router)
+app.include_router(categories_router)
 
 @app.exception_handler(StarletteHTTPException)
 async def custom_http_exception_handler(request, exc: StarletteHTTPException):

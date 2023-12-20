@@ -4,12 +4,14 @@ from typing import Any, Optional, AsyncGenerator
 from uuid import uuid4
 from fastapi.testclient import TestClient
 
-from sqlalchemy import delete, func, select, insert
+from sqlalchemy import and_, delete, func, select, insert
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from sqlmodel import col
+from models.category import CategoryInDB
 
 from models.keyword import KeywordInDB
 from models.user import UserInDB
+from models.users_keywords_links import UserKeywordLink
 
 
 async def get_unique_telegram_id(
@@ -33,16 +35,12 @@ async def create_user(
     defaults=False,
     active=True,
     lang="en",
-    keywords: list[KeywordInDB] = None
 ) -> UserInDB:
-    if keywords is None:
-        keywords = []
     user_uuid = uuid4()
     if defaults:
         user = UserInDB(
             uuid=user_uuid,
             name=f"user:{user_uuid}",
-            keywords=keywords
         )
     else:
         user = UserInDB(
@@ -51,7 +49,6 @@ async def create_user(
             telegram_id=random.randint(1, 1_000_000),
             active=active,
             lang=lang,
-            keywords=keywords
         )
     async with async_session_maker() as session:
         session.add(user)
@@ -85,18 +82,63 @@ async def create_keywords_list(
 async def get_keywords_count_by_filter(
     async_session_maker: async_sessionmaker,
     *,
-    filter: Optional[str] = None,
+    word_filter: Optional[str] = None,
     strict: bool = True
 ) -> int:
     session: AsyncSession
     async with async_session_maker() as session:
         st = select(func.count(KeywordInDB.id))
-        if filter:
+        if word_filter:
             if strict:
-                st = st.where(KeywordInDB.word == filter)
+                st = st.where(KeywordInDB.word == word_filter)
             else:
-                st = st.where(col(KeywordInDB.word).like(filter))
+                st = st.where(col(KeywordInDB.word).like(word_filter))
         return await session.scalar(st)
+
+
+async def add_user_keywords(
+    async_session_maker: async_sessionmaker,
+    *,
+    user: UserInDB,
+    category_id: int,
+    keywords: list[KeywordInDB]
+):
+    if not keywords:
+        return
+    insert_data = []
+    for kw in keywords:
+        insert_data.append({
+            "user_uuid": user.uuid,
+            "keyword_id": kw.id,
+            "category_id": category_id
+        })
+
+    session: AsyncSession
+    async with async_session_maker() as session:
+        await session.execute(insert(UserKeywordLink), insert_data)
+        await session.commit()
+
+
+async def get_user_keywords(
+    async_session_maker: async_sessionmaker,
+    *,
+    user_uuid: int,
+    category_id: int,
+):
+    async with async_session_maker() as session:
+        st = (
+            select(KeywordInDB)
+                .select_from(UserKeywordLink)
+                .join(KeywordInDB)
+                .where(
+                    and_(
+                        UserKeywordLink.user_uuid == user_uuid,
+                        UserKeywordLink.category_id == category_id
+                    )
+                )
+        )
+        return (await session.scalars(st)).all()
+
 
 
 async def delete_all_keywords(
@@ -105,6 +147,54 @@ async def delete_all_keywords(
     session: AsyncSession
     async with async_session_maker() as session:
         await session.execute(delete(KeywordInDB))
+        await session.commit()
+
+
+async def create_categories_list(
+    async_session_maker: async_sessionmaker,
+    *,
+    count: int = 10,
+    prefix: Optional[str] = None
+) -> list[CategoryInDB]:
+    if count == 0:
+        return []
+
+    if prefix is None:
+        prefix = f"{uuid4()}_"
+
+    session: AsyncSession
+    async with async_session_maker() as session:
+        res = await session.scalars(
+            insert(CategoryInDB).returning(CategoryInDB),
+            [{"name":f"{prefix}{i}"} for i in range(count)]
+        )
+        await session.commit()
+    return res.all()
+
+
+async def get_categories_count_by_filter(
+    async_session_maker: async_sessionmaker,
+    *,
+    name_filter: Optional[str] = None,
+    strict: bool = True
+) -> int:
+    session: AsyncSession
+    async with async_session_maker() as session:
+        st = select(func.count(CategoryInDB.id))
+        if name_filter:
+            if strict:
+                st = st.where(CategoryInDB.name == name_filter)
+            else:
+                st = st.where(col(CategoryInDB.name).like(name_filter))
+        return await session.scalar(st)
+
+
+async def delete_all_categories(
+    async_session_maker: async_sessionmaker,
+) -> int:
+    session: AsyncSession
+    async with async_session_maker() as session:
+        await session.execute(delete(CategoryInDB))
         await session.commit()
 
 

@@ -49,7 +49,9 @@ async def get_keyword(
     }
 )
 async def create_keyword(
-    keyword_created_tuple: Annotated[Tuple[KeywordInDB, bool], Depends(create_keyword_dep)],
+    keyword_created_tuple: Annotated[
+        Tuple[KeywordInDB, bool], Depends(create_keyword_dep)
+    ],
     response: Response
 ):
     """ Create keyword or return if already exists """

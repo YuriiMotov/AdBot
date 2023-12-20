@@ -1,11 +1,13 @@
-from typing import Annotated
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from models.category import CategoryInDB, CategoryOutput
 
 from models.user import UserInDB, UserOutput
 from models.keyword import KeywordInDB, KeywordOutput
-from .dependencies import get_user_dep, create_user_dep, update_user_dep
-from ..keywords.dependencies import get_keywords_by_user_dep
+from .dependencies import (
+    add_user_keywords_dep, delete_user_keywords_dep, get_user_dep, create_user_dep, update_user_dep, get_user_keywords_dep
+)
 from ..pagination import Paginated
 
 
@@ -65,13 +67,51 @@ async def update_user(
 # `User keywords` endpoints
 
 @users_router.get(
-    "/{user_uuid}/keywords/",
-    response_model=Paginated[KeywordOutput]
+    "/{user_uuid}/categories/{category_id}/keywords/",
+    response_model=Paginated[KeywordOutput],
+    responses={
+        404: {"description": "User or category not found"},
+    }
 )
 async def get_user_keywords(
-
-    keywords: Annotated[KeywordInDB, Depends(get_keywords_by_user_dep)]
+    keywords: Annotated[Paginated[KeywordOutput], Depends(get_user_keywords_dep)]
 ):
-    """ Get user's keyword list """
+    """ Get user keywords list """
     return keywords
+
+
+@users_router.post(
+    "/{user_uuid}/categories/{category_id}/keywords/",
+    responses={
+        404: {"description": "User or category not found"},
+    }
+)
+async def add_user_keyword(
+    keyword_added: Annotated[Paginated[KeywordOutput], Depends(add_user_keywords_dep)],
+) -> str:
+    """ Add keyword to user's list """
+
+    if keyword_added:
+        return "Keyword added successfully"
+    else:
+        return "Keyword already in user's list"
+
+
+@users_router.delete(
+    "/{user_uuid}/categories/{category_id}/keywords/",
+    responses={
+        404: {"description": "User or category not found"},
+    }
+)
+async def delete_user_keyword(
+    keyword_deleted: Annotated[
+        Paginated[KeywordOutput], Depends(delete_user_keywords_dep)
+    ],
+) -> str:
+    """ Delete keyword from user's list """
+
+    if keyword_deleted:
+        return "Keyword deleted successfully"
+    else:
+        return "Keyword was not in user's list"
 

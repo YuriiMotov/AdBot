@@ -29,7 +29,7 @@ async def prepare_database(engine) -> None:
 
 @pytest.fixture(scope="session")
 def async_session_maker(engine, prepare_database) -> async_sessionmaker:
-    yield async_sessionmaker(engine, expire_on_commit=False)
+    yield async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
 @pytest.fixture(scope="session")

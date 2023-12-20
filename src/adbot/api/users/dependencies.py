@@ -1,13 +1,20 @@
-from typing import Annotated, Optional, Sequence
+from math import ceil
+from typing import Annotated, Optional, Sequence, Tuple
 from uuid import UUID 
 
-from fastapi import Depends, HTTPException, status
-from sqlalchemy import select, or_
+from fastapi import Depends, HTTPException, Query, status
+from sqlalchemy import and_, delete, func, insert, select, or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col
+from adbot.api.categories.dependencies import get_category_by_id_dep
+from adbot.api.keywords.dependencies import create_keyword_dep
+from adbot.api.pagination import Paginated, Pagination
 
 from database import AsyncSession, get_async_session
+from models.category import CategoryInDB
+from models.keyword import KeywordCreate, KeywordInDB, KeywordOutput
 from models.user import UserInDB, UserCreate, UserPatch
+from models.users_keywords_links import UserKeywordLink
 
 
 async def get_user_dep(
@@ -121,3 +128,116 @@ async def update_user_dep(
             detail=f"Error occured. Try again"
         )
     return user_to_update
+
+
+def _construct_keywords_by_user_st(
+    is_total_st: bool, user_uuid: UUID, category_id: int, pagination: Pagination
+):
+    if is_total_st:
+        st = select(func.count(KeywordInDB.id)).group_by(UserKeywordLink.user_uuid)
+    else:
+        offset = (pagination.page - 1) * pagination.limit
+        st = select(KeywordInDB).offset(offset).limit(pagination.limit)
+    st = (
+        st.select_from(UserKeywordLink)
+            .join(KeywordInDB)
+            .where(
+                and_(
+                    UserKeywordLink.user_uuid == user_uuid,
+                    UserKeywordLink.category_id == category_id
+                )
+            )
+    )
+    return st
+
+
+async def get_user_keywords_dep(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    pagination: Annotated[Pagination, Depends()],
+    user_uuid: UUID,
+    category_id: int
+) -> Paginated[KeywordOutput]:
+
+    total_st = _construct_keywords_by_user_st(
+        is_total_st=True,
+        user_uuid=user_uuid,
+        category_id=category_id,
+        pagination=pagination
+    )
+    total_results = await session.scalar(total_st)
+    if total_results is None:
+        total_results = 0
+
+    results_st = _construct_keywords_by_user_st(
+        is_total_st=False,
+        user_uuid=user_uuid,
+        category_id=category_id,
+        pagination=pagination
+    )
+    keywords = await session.scalars(results_st)
+    res = Paginated(
+        total_results=total_results,
+        total_pages=max(1, ceil(total_results / pagination.limit)),
+        current_page=pagination.page,
+        results=[KeywordOutput.model_validate(kw) for kw in keywords.all()]
+    )
+    return res
+
+
+async def add_user_keywords_dep(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    user: Annotated[UserInDB, Depends(get_user_dep)],
+    category: Annotated[CategoryInDB, Depends(get_category_by_id_dep)],
+    word: Annotated[str, Query()],
+) -> bool:
+    keyword_created_tuple = await create_keyword_dep(
+        session=session,
+        keyword_data=KeywordCreate(word=word)
+    )
+    keyword = keyword_created_tuple[0]
+
+    try:
+        await session.execute(
+            insert(UserKeywordLink),
+            [
+                {
+                    "user_uuid": user.uuid,
+                    "keyword_id": keyword.id,
+                    "category_id": category.id
+                }
+            ]
+        )
+        await session.commit()
+    except IntegrityError as e:
+        return False  # Already in user's list
+
+    return True    # Added to user's list
+
+
+async def delete_user_keywords_dep(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    user: Annotated[UserInDB, Depends(get_user_dep)],
+    category: Annotated[CategoryInDB, Depends(get_category_by_id_dep)],
+    word: Annotated[str, Query()],
+) -> bool:
+    
+    st = select(KeywordInDB).where(KeywordInDB.word == word)
+    keyword = await session.scalar(st)
+    if keyword is None:
+        return False    # Already not in user's list (not even exists)
+
+    st = delete(UserKeywordLink).where(
+        and_(
+            UserKeywordLink.user_uuid == user.uuid,
+            UserKeywordLink.category_id == category.id,
+            UserKeywordLink.keyword_id == keyword.id
+        )
+    ).returning(UserKeywordLink)
+    res = await session.execute(st)
+    await session.commit()
+
+    deleted_cnt = len(res.scalars().all())
+    if deleted_cnt == 0:
+        return False  # Already not in user's list
+
+    return True    # Deleted from user's list
