@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from models.keyword import KeywordInDB
 from models.users_keywords_links import UserKeywordLink
 from tests.helpers import (
-    create_user, create_keywords_list, get_multimage_results,
+    create_user, create_keywords_list, get_multipage_results,
     create_categories_list, add_user_keywords, get_user_keywords
 )
 

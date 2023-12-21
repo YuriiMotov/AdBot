@@ -8,7 +8,7 @@ from alembic import context
 
 sys.path.append(os.path.join(sys.path[0], 'src'))
 
-from models import user, keyword
+from models import user, keyword, source
 from sqlmodel import SQLModel
 
 # this is the Alembic Config object, which provides

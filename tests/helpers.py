@@ -7,9 +7,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import and_, delete, func, select, insert
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from sqlmodel import col
+from common_types import SourceType
 from models.category import CategoryInDB
 
 from models.keyword import KeywordInDB
+from models.source import SourceInDB
 from models.user import UserInDB
 from models.users_keywords_links import UserKeywordLink
 
@@ -198,6 +200,48 @@ async def delete_all_categories(
         await session.commit()
 
 
+async def create_sources_list(
+    async_session_maker: async_sessionmaker,
+    *,
+    count: int = 10,
+    source_type: SourceType,
+    category_id: int,
+    prefix: Optional[str] = None
+) -> list[SourceInDB]:
+    if count == 0:
+        return []
+
+    if prefix is None:
+        prefix = f"{uuid4()}_"
+
+    insert_data = []
+    for i in range(count):
+        insert_data.append({
+            "title": f"{prefix}{i}",
+            "type": source_type,
+            "source_info": f"{prefix}{i}",
+            "category_id": category_id
+        })
+
+    session: AsyncSession
+    async with async_session_maker() as session:
+        res = await session.scalars(
+            insert(SourceInDB).returning(SourceInDB),
+            insert_data
+        )
+        await session.commit()
+    return res.all()
+
+
+async def delete_all_sources(
+    async_session_maker: async_sessionmaker,
+) -> int:
+    session: AsyncSession
+    async with async_session_maker() as session:
+        await session.execute(delete(SourceInDB))
+        await session.commit()
+
+
 class ResStat():
     total_pages: int
     total_results: int
@@ -206,7 +250,7 @@ class ResStat():
         self.total_results = 0
 
 
-async def get_multimage_results(
+async def get_multipage_results(
     async_client: TestClient,
     base_url: str,
     limit: Optional[int] = None,
@@ -227,6 +271,9 @@ async def get_multimage_results(
     if limit:
         url += f"{url_connector}limit={limit}"
     resp = await async_client.get(url)
+    # if resp.status_code != 200:
+    #     print(resp.status_code)
+    #     print(resp.json())
     assert resp.status_code == 200, "Request error (status_code != 200)"
     resp_data = resp.json()
     for item in resp_data["results"]:
@@ -243,6 +290,9 @@ async def get_multimage_results(
         if limit:
             url += f"&limit={limit}"
         resp = await async_client.get(url)
+        # if resp.status_code != 200:
+        #     print(resp.status_code)
+        #     print(resp.json())
         assert resp.status_code == 200, "Request error (status_code != 200)"
         resp_data = resp.json()
         assert resp_data["total_pages"] == total_pages, "Pagination error, " \

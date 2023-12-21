@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from tests.helpers import (
-    ResStat, create_categories_list, get_categories_count_by_filter, delete_all_categories, get_multimage_results
+    ResStat, create_categories_list, get_categories_count_by_filter, delete_all_categories, get_multipage_results
 )
 
 pytestmark = pytest.mark.asyncio(scope="module")
@@ -80,7 +80,7 @@ async def test_categories_get_by_filter_none_filter_empty_res(
 
 
 @pytest.mark.parametrize("limit", [None, 1, 2, 100])
-async def test_categories_get_multipage_default_limit(
+async def test_categories_get_multipage(
     async_client: TestClient,
     async_session_maker: async_sessionmaker,
     limit
@@ -91,7 +91,7 @@ async def test_categories_get_multipage_default_limit(
     categories_total = await get_categories_count_by_filter(async_session_maker)
 
     resp_stat = ResStat()
-    categories_results = get_multimage_results(
+    categories_results = get_multipage_results(
         async_client=async_client,
         base_url="/categories/",
         resp_stat=resp_stat,

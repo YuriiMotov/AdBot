@@ -93,7 +93,11 @@ async def update_user_dep(
         if user_data.telegram_id is not None:
             conditions.append(col(UserInDB.telegram_id) == user_data.telegram_id)
     if conditions:
-        st = select(UserInDB).where(col(UserInDB.uuid) != user_uuid).where(or_(*conditions))
+        st = (
+            select(UserInDB)
+                .where(col(UserInDB.uuid) != user_uuid)
+                .where(or_(False, *conditions))
+        )
         users: Sequence[UserInDB] = (await session.scalars(st)).all()
         if users:
             errors = []
@@ -134,7 +138,7 @@ def _construct_keywords_by_user_st(
     is_total_st: bool, user_uuid: UUID, category_id: int, pagination: Pagination
 ):
     if is_total_st:
-        st = select(func.count(KeywordInDB.id)).group_by(UserKeywordLink.user_uuid)
+        st = select(func.count(KeywordInDB.id))
     else:
         offset = (pagination.page - 1) * pagination.limit
         st = select(KeywordInDB).offset(offset).limit(pagination.limit)

@@ -167,6 +167,14 @@ async def test_create_user_duplicate_all(
     assert resp.status_code == 400
     resp_json = resp.json()
     assert len(resp_json["detail"]["errors"]) == 3
+    errors = [
+        resp_json["detail"]["errors"][0]["code"],
+        resp_json["detail"]["errors"][1]["code"],
+        resp_json["detail"]["errors"][2]["code"]
+    ]
+    assert "DUPLICATE_UUID" in errors
+    assert "USER_NAME_ALREADY_USED" in errors
+    assert "TELEGRAM_ID_ALREADY_USED" in errors
 
 
 

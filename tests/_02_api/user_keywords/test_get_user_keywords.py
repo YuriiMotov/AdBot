@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from tests.helpers import (
-    create_user, create_keywords_list, get_multimage_results,
+    create_user, create_keywords_list, get_multipage_results,
     create_categories_list, add_user_keywords
 )
 
@@ -77,7 +77,7 @@ async def test_get_user_keywords(
 
     # Request user's keyword list
     for cat in cats:
-        keywords_results = get_multimage_results(
+        keywords_results = get_multipage_results(
             async_client=async_client,
             base_url=f"/users/{user.uuid}/categories/{cat.id}/keywords/",
             limit=limit

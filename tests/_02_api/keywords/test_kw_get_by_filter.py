@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from tests.helpers import (
-    ResStat, create_keywords_list, get_keywords_count_by_filter, delete_all_keywords, get_multimage_results
+    ResStat, create_keywords_list, get_keywords_count_by_filter, delete_all_keywords, get_multipage_results
 )
 
 pytestmark = pytest.mark.asyncio(scope="module")
@@ -91,7 +91,7 @@ async def test_keywords_get_multipage_default_limit(
     keywords_total = await get_keywords_count_by_filter(async_session_maker)
 
     resp_stat = ResStat()
-    keywords_results = get_multimage_results(
+    keywords_results = get_multipage_results(
         async_client=async_client,
         base_url="/keywords/",
         resp_stat=resp_stat,
