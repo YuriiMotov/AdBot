@@ -1,9 +1,10 @@
+from typing import TypeVar
 from math import ceil
 from typing import Annotated, Optional, Tuple
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Query, status
-from sqlalchemy import delete, or_, select, func
+from sqlalchemy import ColumnElement, Select, delete, or_, select, func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col
 from common_types import SourceType
@@ -27,21 +28,17 @@ async def get_source_by_id_dep(
     return source
 
 
-def _construct_get_source_st(
-    is_total_st: bool,
+StType = TypeVar("StType", bound=Select)
+
+def _apply_get_source_filters(
+    st: StType,
     source_type: Optional[SourceType],
     category_id: Optional[int],
-    pagination: Pagination
-):
-    if is_total_st:
-        st = select(func.count(SourceInDB.id))
-    else:
-        offset = (pagination.page - 1) * pagination.limit
-        st = select(SourceInDB).offset(offset).limit(pagination.limit)
+) -> StType:
     if source_type is not None:
-        st = st.where(SourceInDB.type == source_type)
+        st = st.where(col(SourceInDB.type) == source_type)
     if category_id is not None:
-        st = st.where(SourceInDB.category_id == category_id)
+        st = st.where(col(SourceInDB.category_id) == category_id)
     return st
 
 
@@ -52,22 +49,15 @@ async def get_sources_dep(
     category_id: Annotated[Optional[int], Query()] = None,
 ) -> Paginated[SourceOutput]:
 
-    total_st = _construct_get_source_st(
-        is_total_st=True,
-        pagination=pagination,
-        source_type=source_type,
-        category_id=category_id
-    )
+    total_st = select(func.count(SourceInDB.id))
+    total_st = _apply_get_source_filters(total_st, source_type, category_id)
     total_results = await session.scalar(total_st)
     if total_results is None:
         total_results = 0
 
-    results_st = _construct_get_source_st(
-        is_total_st=False,
-        pagination=pagination,
-        source_type=source_type,
-        category_id=category_id
-    )
+    offset = (pagination.page - 1) * pagination.limit
+    results_st = select(SourceInDB).offset(offset).limit(pagination.limit)
+    results_st = _apply_get_source_filters(results_st, source_type, category_id)
     sources = await session.scalars(results_st)
     res = Paginated(
         total_results=total_results,
@@ -95,8 +85,8 @@ async def create_source_dep(
     # Check whether the source title or info already exist
     st = select(SourceInDB).where(
         or_(
-            SourceInDB.title == source_data.title,
-            SourceInDB.source_info == source_data.source_info,
+            col(SourceInDB.title) == source_data.title,
+            col(SourceInDB.source_info) == source_data.source_info,
         )
     )
     sources = (await session.scalars(st)).all()
@@ -142,8 +132,7 @@ async def update_source_dep(
 
     # Check whether the source already exists
     update_data = source_data.model_dump(exclude_unset=True)
-    conditions = []
-    conditions = []
+    conditions: list[ColumnElement[bool]] = []
     if "title" in update_data.keys():
         conditions.append(col(SourceInDB.title) == source_data.title)
     if "source_info" in update_data.keys():
@@ -187,16 +176,11 @@ async def delete_source_dep(
     session: Annotated[AsyncSession, Depends(get_async_session)]
 ) -> bool:
 
-    st = (
-        delete(SourceInDB)
-            .where(SourceInDB.id == source_id)
-            .returning(SourceInDB)
-    )
+    st = delete(SourceInDB).where(col(SourceInDB.id) == source_id)
     res = await session.execute(st)
     await session.commit()
 
-    deleted_cnt = len(res.scalars().all())
-    if deleted_cnt == 0:
+    if res.rowcount == 0:
         raise HTTPException(
             status_code=404,
             detail=f"Source with id={source_id} not found"

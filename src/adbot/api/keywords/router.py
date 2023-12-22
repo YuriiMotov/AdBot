@@ -19,7 +19,7 @@ keywords_router = APIRouter(
     response_model=Paginated[KeywordOutput]
 )
 async def get_keywords(
-    keywords: Annotated[KeywordInDB, Depends(get_keywords_dep)]
+    keywords: Annotated[Paginated[KeywordOutput], Depends(get_keywords_dep)]
 ):
     """ Get keywords by filter """
     return keywords

@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, Query, status
 from sqlalchemy import delete, select, func
+from sqlmodel import col
 
 from database import AsyncSession, get_async_session
 from models.category import CategoryInDB, CategoryCreate, CategoryOutput
@@ -29,7 +30,7 @@ async def get_categories_dep(
     name: Annotated[Optional[str], Query()] = None,
 ) -> Paginated[CategoryOutput]:
     if name:
-        st = select(CategoryInDB).where(CategoryInDB.name == name)
+        st = select(CategoryInDB).where(col(CategoryInDB.name) == name)
         category = await session.scalar(st)
         if category:
             categories = [CategoryOutput.model_validate(category)]
@@ -47,12 +48,12 @@ async def get_categories_dep(
 
         offset = (pagination.page - 1) * pagination.limit
         results_st = select(CategoryInDB).offset(offset).limit(pagination.limit)
-        categories = await session.scalars(results_st)
+        categories_res = await session.scalars(results_st)
         res = Paginated(
             total_results=total_results,
             total_pages=max(1, ceil(total_results / pagination.limit)),
             current_page=pagination.page,
-            results=[CategoryOutput.model_validate(cat) for cat in categories.all()]
+            results=[CategoryOutput.model_validate(cat) for cat in categories_res]
         )
         return res
 
@@ -64,7 +65,7 @@ async def create_category_dep(
 ) -> Tuple[CategoryInDB, bool]:
 
     # Check whether the category already exists
-    st = select(CategoryInDB).where(CategoryInDB.name == category_data.name)
+    st = select(CategoryInDB).where(col(CategoryInDB.name) == category_data.name)
     category = await session.scalar(st)
     if category:
         return (category, False)
@@ -84,16 +85,11 @@ async def delete_category_dep(
     session: Annotated[AsyncSession, Depends(get_async_session)]
 ) -> bool:
 
-    st = (
-        delete(CategoryInDB)
-            .where(CategoryInDB.id == category_id)
-            .returning(CategoryInDB)
-    )
+    st = delete(CategoryInDB).where(col(CategoryInDB.id) == category_id)
     res = await session.execute(st)
     await session.commit()
 
-    deleted_cnt = len(res.scalars().all())
-    if deleted_cnt == 0:
+    if res.rowcount == 0:
         raise HTTPException(
             status_code=404,
             detail=f"Category with id={category_id} not found"

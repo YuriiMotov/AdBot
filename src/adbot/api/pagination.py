@@ -6,8 +6,8 @@ from pydantic import BaseModel
 
 @dataclass
 class Pagination():
-    page: Annotated[Optional[int], Query(gt=0)] = 1
-    limit: Annotated[Optional[int], Query(gt=0, le=100)] = 15
+    page: Annotated[int, Query(gt=0)] = 1
+    limit: Annotated[int, Query(gt=0, le=100)] = 15
 
 
 T = TypeVar("T")

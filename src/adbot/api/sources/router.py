@@ -19,7 +19,7 @@ sources_router = APIRouter(
 
 @sources_router.get("/", response_model=Paginated[SourceOutput])
 async def get_sources(
-    sources: Annotated[SourceInDB, Depends(get_sources_dep)]
+    sources: Annotated[Paginated[SourceOutput], Depends(get_sources_dep)]
 ):
     """ Get sources by filter (source_type) """
     return sources

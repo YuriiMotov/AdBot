@@ -19,7 +19,7 @@ categories_router = APIRouter(
     response_model=Paginated[CategoryOutput]
 )
 async def get_categories(
-    categories: Annotated[CategoryInDB, Depends(get_categories_dep)]
+    categories: Annotated[Paginated[CategoryOutput], Depends(get_categories_dep)]
 ):
     """ Get categories by filter """
     return categories

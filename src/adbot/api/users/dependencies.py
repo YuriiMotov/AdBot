@@ -1,9 +1,9 @@
 from math import ceil
-from typing import Annotated, Optional, Sequence, Tuple
+from typing import Annotated, Optional, Sequence, Tuple, TypeVar
 from uuid import UUID 
 
 from fastapi import Depends, HTTPException, Query, status
-from sqlalchemy import and_, delete, func, insert, select, or_
+from sqlalchemy import Select, and_, delete, func, insert, select, or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col
 from adbot.api.categories.dependencies import get_category_by_id_dep
@@ -134,21 +134,23 @@ async def update_user_dep(
     return user_to_update
 
 
-def _construct_keywords_by_user_st(
-    is_total_st: bool, user_uuid: UUID, category_id: int, pagination: Pagination
-):
-    if is_total_st:
-        st = select(func.count(KeywordInDB.id))
-    else:
-        offset = (pagination.page - 1) * pagination.limit
-        st = select(KeywordInDB).offset(offset).limit(pagination.limit)
+StType = TypeVar("StType", bound=Select)
+
+def _apply_filters_keywords_by_user(
+    st: StType, user_uuid: UUID, category_id: int
+) -> StType:
+    # if is_total_st:
+    #     st = select(func.count(KeywordInDB.id))
+    # else:
+    #     offset = (pagination.page - 1) * pagination.limit
+    #     st = select(KeywordInDB).offset(offset).limit(pagination.limit)
     st = (
         st.select_from(UserKeywordLink)
             .join(KeywordInDB)
             .where(
                 and_(
-                    UserKeywordLink.user_uuid == user_uuid,
-                    UserKeywordLink.category_id == category_id
+                    col(UserKeywordLink.user_uuid) == user_uuid,
+                    col(UserKeywordLink.category_id) == category_id
                 )
             )
     )
@@ -162,28 +164,22 @@ async def get_user_keywords_dep(
     category_id: int
 ) -> Paginated[KeywordOutput]:
 
-    total_st = _construct_keywords_by_user_st(
-        is_total_st=True,
-        user_uuid=user_uuid,
-        category_id=category_id,
-        pagination=pagination
-    )
+    total_st = select(func.count(KeywordInDB.id))
+    total_st = _apply_filters_keywords_by_user(total_st, user_uuid, category_id)
     total_results = await session.scalar(total_st)
     if total_results is None:
         total_results = 0
 
-    results_st = _construct_keywords_by_user_st(
-        is_total_st=False,
-        user_uuid=user_uuid,
-        category_id=category_id,
-        pagination=pagination
-    )
-    keywords = await session.scalars(results_st)
+    offset = (pagination.page - 1) * pagination.limit
+    
+    results_st = select(KeywordInDB).offset(offset).limit(pagination.limit)
+    results_st = _apply_filters_keywords_by_user(results_st, user_uuid, category_id)
+    keywords_res = await session.scalars(results_st)
     res = Paginated(
         total_results=total_results,
         total_pages=max(1, ceil(total_results / pagination.limit)),
         current_page=pagination.page,
-        results=[KeywordOutput.model_validate(kw) for kw in keywords.all()]
+        results=[KeywordOutput.model_validate(kw) for kw in keywords_res]
     )
     return res
 
@@ -225,23 +221,22 @@ async def delete_user_keywords_dep(
     word: Annotated[str, Query()],
 ) -> bool:
     
-    st = select(KeywordInDB).where(KeywordInDB.word == word)
-    keyword = await session.scalar(st)
+    st_check_keyword_exists = select(KeywordInDB).where(col(KeywordInDB.word) == word)
+    keyword = await session.scalar(st_check_keyword_exists)
     if keyword is None:
         return False    # Already not in user's list (not even exists)
 
-    st = delete(UserKeywordLink).where(
+    st_delete = delete(UserKeywordLink).where(
         and_(
-            UserKeywordLink.user_uuid == user.uuid,
-            UserKeywordLink.category_id == category.id,
-            UserKeywordLink.keyword_id == keyword.id
+            col(UserKeywordLink.user_uuid) == user.uuid,
+            col(UserKeywordLink.category_id) == category.id,
+            col(UserKeywordLink.keyword_id) == keyword.id
         )
-    ).returning(UserKeywordLink)
-    res = await session.execute(st)
+    )
+    res = await session.execute(st_delete)
     await session.commit()
 
-    deleted_cnt = len(res.scalars().all())
-    if deleted_cnt == 0:
+    if res.rowcount == 0:
         return False  # Already not in user's list
 
     return True    # Deleted from user's list

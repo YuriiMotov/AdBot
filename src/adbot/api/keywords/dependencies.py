@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, Query, status
 from sqlalchemy import and_, select, func
+from sqlmodel import col
 
 from database import AsyncSession, get_async_session
 from models.keyword import KeywordInDB, KeywordCreate, KeywordOutput
@@ -31,7 +32,7 @@ async def get_keywords_dep(
     word: Annotated[Optional[str], Query()] = None,
 ) -> Paginated[KeywordOutput]:
     if word:
-        st = select(KeywordInDB).where(KeywordInDB.word == word)
+        st = select(KeywordInDB).where(col(KeywordInDB.word) == word)
         keyword = await session.scalar(st)
         if keyword:
             keywords = [KeywordOutput.model_validate(keyword)]
@@ -49,12 +50,12 @@ async def get_keywords_dep(
 
         offset = (pagination.page - 1) * pagination.limit
         results_st = select(KeywordInDB).offset(offset).limit(pagination.limit)
-        keywords = await session.scalars(results_st)
+        keywords_res = await session.scalars(results_st)
         res = Paginated(
             total_results=total_results,
             total_pages=max(1, ceil(total_results / pagination.limit)),
             current_page=pagination.page,
-            results=[KeywordOutput.model_validate(kw) for kw in keywords.all()]
+            results=[KeywordOutput.model_validate(kw) for kw in keywords_res]
         )
         return res
 
@@ -66,7 +67,7 @@ async def create_keyword_dep(
 ) -> Tuple[KeywordInDB, bool]:
 
     # Check whether the keyword already exists
-    st = select(KeywordInDB).where(KeywordInDB.word == keyword_data.word)
+    st = select(KeywordInDB).where(col(KeywordInDB.word) == keyword_data.word)
     keyword = await session.scalar(st)
     if keyword:
         return (keyword, False)
