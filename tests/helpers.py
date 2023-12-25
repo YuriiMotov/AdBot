@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 import random
 from typing import Any, Optional, AsyncGenerator
 from uuid import uuid4
@@ -11,6 +12,7 @@ from common_types import SourceType
 from models.category import CategoryInDB
 
 from models.keyword import KeywordInDB
+from models.publication import PublicationInDB
 from models.source import SourceInDB
 from models.user import UserInDB
 from models.users_keywords_links import UserKeywordLink
@@ -142,16 +144,6 @@ async def get_user_keywords(
         return (await session.scalars(st)).all()
 
 
-
-async def delete_all_keywords(
-    async_session_maker: async_sessionmaker,
-) -> int:
-    session: AsyncSession
-    async with async_session_maker() as session:
-        await session.execute(delete(KeywordInDB))
-        await session.commit()
-
-
 async def create_categories_list(
     async_session_maker: async_sessionmaker,
     *,
@@ -191,21 +183,12 @@ async def get_categories_count_by_filter(
         return await session.scalar(st)
 
 
-async def delete_all_categories(
-    async_session_maker: async_sessionmaker,
-) -> int:
-    session: AsyncSession
-    async with async_session_maker() as session:
-        await session.execute(delete(CategoryInDB))
-        await session.commit()
-
-
 async def create_sources_list(
     async_session_maker: async_sessionmaker,
     *,
     count: int = 10,
-    source_type: SourceType,
-    category_id: int,
+    source_type: SourceType = SourceType.telegram,
+    category_id: Optional[int] = None,
     prefix: Optional[str] = None
 ) -> list[SourceInDB]:
     if count == 0:
@@ -213,6 +196,10 @@ async def create_sources_list(
 
     if prefix is None:
         prefix = f"{uuid4()}_"
+
+    if category_id is None:
+        categories = await create_categories_list(async_session_maker, count=1)
+        category_id = categories[0].id
 
     insert_data = []
     for i in range(count):
@@ -233,12 +220,29 @@ async def create_sources_list(
     return res.all()
 
 
-async def delete_all_sources(
+async def create_publication(
+    async_client: TestClient,
     async_session_maker: async_sessionmaker,
-) -> int:
+) -> dict:
+    sources = await create_sources_list(async_session_maker, count=1)
+    create_data = {
+        "url": str(uuid4()),
+        "dt": datetime.now().isoformat(),
+        "text": str(uuid4()),
+        "source_id": sources[0].id
+    }
+    resp = await async_client.post(f"/publications/", json=create_data)
+    assert resp.status_code == 201
+    return resp.json()
+
+
+async def delete_all_objects(
+    async_session_maker: async_sessionmaker,
+    object_model: type
+):
     session: AsyncSession
     async with async_session_maker() as session:
-        await session.execute(delete(SourceInDB))
+        await session.execute(delete(object_model))
         await session.commit()
 
 
@@ -253,6 +257,8 @@ class ResStat():
 async def get_multipage_results(
     async_client: TestClient,
     base_url: str,
+    *,
+    query_params: dict[str, Any] = None,
     limit: Optional[int] = None,
     resp_stat: Optional[ResStat] = None
 ) -> AsyncGenerator[dict[str, Any], None]:
@@ -264,13 +270,13 @@ async def get_multipage_results(
     # Initialization
     if resp_stat is None:
         resp_stat = ResStat()
-    url = base_url
-    url_connector = "?" if (base_url.find("?") < 0) else "&"
+    params = query_params.copy() if query_params else {}
 
     # Request first page and iterate throught results
     if limit:
-        url += f"{url_connector}limit={limit}"
-    resp = await async_client.get(url)
+        params["limit"] = limit
+
+    resp = await async_client.get(base_url, params=params)
     # if resp.status_code != 200:
     #     print(resp.status_code)
     #     print(resp.json())
@@ -286,10 +292,9 @@ async def get_multipage_results(
     # Request other pages and iterate throught results    
     for page in range(2, total_pages + 1):
         resp_stat.total_pages += 1
-        url = f"{base_url}{url_connector}page={page}"
-        if limit:
-            url += f"&limit={limit}"
-        resp = await async_client.get(url)
+        params["page"] = page
+
+        resp = await async_client.get(base_url, params=params)
         # if resp.status_code != 200:
         #     print(resp.status_code)
         #     print(resp.json())
@@ -302,7 +307,7 @@ async def get_multipage_results(
         for item in resp_data["results"]:
             resp_stat.total_results += 1
             yield item
-    
+
     # compare the stated amount of pages and results and the actual data
     assert resp_stat.total_pages == total_pages, "Pagination error, " \
                                                         "wrong `total_pages` field value"

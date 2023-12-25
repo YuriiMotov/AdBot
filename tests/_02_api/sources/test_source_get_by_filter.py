@@ -6,10 +6,11 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from common_types import SourceType
+from models.source import SourceInDB
 
 from tests.helpers import (
-    ResStat, create_categories_list, create_sources_list, delete_all_sources, #get_sources_count_by_filter,
-    get_multipage_results, #delete_all_sources
+    ResStat, create_categories_list, create_sources_list, delete_all_objects,
+    get_multipage_results
 )
 
 pytestmark = pytest.mark.asyncio(scope="module")
@@ -20,7 +21,7 @@ async def test_sources_get_by_filter_empty_table(
     async_session_maker: async_sessionmaker
 ):
     """ Get all sources, but no one exists in the DB """
-    await delete_all_sources(async_session_maker)
+    await delete_all_objects(async_session_maker, SourceInDB)
 
     sources_res = get_multipage_results(async_client, f"/sources/")
     res_sources_set = {source["title"] async for source in sources_res}
@@ -95,7 +96,7 @@ async def test_sources_get_by_sourcetype_multipage(
         Requests with different `limit` parameter.
     """
     COUNT_IN_GROUP_2 = 1
-    await delete_all_sources(async_session_maker)
+    await delete_all_objects(async_session_maker, SourceInDB)
     categories = await create_categories_list(async_session_maker, count=2)
     sources_1 = await create_sources_list(
         async_session_maker,
@@ -168,7 +169,7 @@ async def test_sources_get_by_category_multipage(
         Requests with different `limit` parameter.
     """
     COUNT_IN_GROUP_2 = 1
-    await delete_all_sources(async_session_maker)
+    await delete_all_objects(async_session_maker, SourceInDB)
     categories = await create_categories_list(async_session_maker, count=2)
     sources_1 = await create_sources_list(
         async_session_maker,

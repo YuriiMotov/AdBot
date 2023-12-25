@@ -5,8 +5,10 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from tests.helpers import (
-    ResStat, create_categories_list, get_categories_count_by_filter, delete_all_categories, get_multipage_results
+    ResStat, create_categories_list, get_categories_count_by_filter, delete_all_objects,
+    get_multipage_results
 )
+from models.category import CategoryInDB
 
 pytestmark = pytest.mark.asyncio(scope="module")
 
@@ -68,7 +70,7 @@ async def test_categories_get_by_filter_none_filter_empty_res(
     async_client: TestClient,
     async_session_maker: async_sessionmaker,
 ):
-    await delete_all_categories(async_session_maker)
+    await delete_all_objects(async_session_maker, CategoryInDB)
 
     resp = await async_client.get(f"/categories/")
     assert resp.status_code == 200
