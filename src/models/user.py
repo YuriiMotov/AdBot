@@ -5,8 +5,8 @@ from sqlmodel import Field, SQLModel, Relationship
 
 from common_types import Lang
 from models.users_keywords_links import UserKeywordLink
+from models.users_publications_links import UserPublicationLink     # just to load model
 from models.keyword import KeywordInDB
-from models.category import CategoryInDB
 
 
 class UserBase(SQLModel):

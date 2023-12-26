@@ -2,11 +2,13 @@ from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Query
 from models.category import CategoryInDB, CategoryOutput
+from models.publication import PublicationOutput
 
 from models.user import UserInDB, UserOutput
 from models.keyword import KeywordInDB, KeywordOutput
 from .dependencies import (
-    add_user_keywords_dep, delete_user_keywords_dep, get_user_dep, create_user_dep, update_user_dep, get_user_keywords_dep
+    add_user_keywords_dep, delete_user_keywords_dep, get_user_dep, create_user_dep,
+    update_user_dep, get_user_keywords_dep, get_user_forwarded_publications_dep
 )
 from ..pagination import Paginated
 
@@ -115,3 +117,13 @@ async def delete_user_keyword(
     else:
         return "Keyword was not in user's list"
 
+
+# `User's publications` endpoints
+
+@users_router.get("/{user_uuid}/forwarded-publications/")
+async def get_user_forwarded_publications(
+    publications: Annotated[
+        Paginated[PublicationOutput], Depends(get_user_forwarded_publications_dep)
+    ]
+):
+    return publications

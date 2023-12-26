@@ -2,6 +2,7 @@ from typing import Optional
 from uuid import UUID
 
 from sqlmodel import Field, SQLModel
+from models.category import CategoryInDB        # Just to load model
 
 
 class UserKeywordLink(SQLModel, table=True):

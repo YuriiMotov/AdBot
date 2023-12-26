@@ -16,6 +16,7 @@ from models.publication import PublicationInDB
 from models.source import SourceInDB
 from models.user import UserInDB
 from models.users_keywords_links import UserKeywordLink
+from models.users_publications_links import UserPublicationLink
 
 
 async def get_unique_telegram_id(
@@ -234,6 +235,29 @@ async def create_publication(
     resp = await async_client.post(f"/publications/", json=create_data)
     assert resp.status_code == 201
     return resp.json()
+
+
+async def add_user_publications(
+    async_session_maker: async_sessionmaker,
+    *,
+    user: UserInDB,
+    publications: list[PublicationInDB]
+) -> list[UserPublicationLink]:
+    if not publications:
+        return
+    insert_data = []
+    for publication in publications:
+        insert_data.append({
+            "user_uuid": user.uuid,
+            "publication_id": publication["id"]
+        })
+    session: AsyncSession
+    async with async_session_maker() as session:
+        inserted_links = await session.scalars(
+            insert(UserPublicationLink).returning(UserPublicationLink), insert_data
+        )
+        await session.commit()
+        return inserted_links.all()
 
 
 async def delete_all_objects(

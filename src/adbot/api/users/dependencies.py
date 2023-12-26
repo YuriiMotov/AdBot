@@ -13,8 +13,10 @@ from adbot.api.pagination import Paginated, Pagination
 from database import AsyncSession, get_async_session
 from models.category import CategoryInDB
 from models.keyword import KeywordCreate, KeywordInDB, KeywordOutput
+from models.publication import PublicationInDB, PublicationOutput
 from models.user import UserInDB, UserCreate, UserPatch
 from models.users_keywords_links import UserKeywordLink
+from models.users_publications_links import UserPublicationLink
 
 
 async def get_user_dep(
@@ -240,3 +242,42 @@ async def delete_user_keywords_dep(
         return False  # Already not in user's list
 
     return True    # Deleted from user's list
+
+
+async def get_user_forwarded_publications_dep(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    user: Annotated[UserInDB, Depends(get_user_dep)],
+    pagination: Annotated[Pagination, Depends()],
+    min_id: Optional[int] = None,
+) -> Paginated[PublicationOutput]:
+    
+    total_st = (
+        select(func.count(UserPublicationLink.id))
+            .where(col(UserPublicationLink.user_uuid) == user.uuid)
+    )
+    if min_id:
+        total_st = total_st.where(col(UserPublicationLink.id) >= min_id)
+    total_results = await session.scalar(total_st)
+    total_results = total_results if total_results else 0
+
+    offset = (pagination.page - 1) * pagination.limit
+    
+    results_st = (
+        select(PublicationInDB)
+            .select_from(UserPublicationLink)
+            .join(PublicationInDB)
+            .where(col(UserPublicationLink.user_uuid) == user.uuid)
+            .order_by(col(UserPublicationLink.id))
+            .offset(offset).limit(pagination.limit)
+    )
+    if min_id:
+        results_st = results_st.where(col(UserPublicationLink.id) >= min_id)
+
+    publications_res = await session.scalars(results_st)
+    res = Paginated(
+        total_results=total_results,
+        total_pages=max(1, ceil(total_results / pagination.limit)),
+        current_page=pagination.page,
+        results=[PublicationOutput.model_validate(kw) for kw in publications_res]
+    )
+    return res
