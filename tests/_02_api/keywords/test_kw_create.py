@@ -67,3 +67,39 @@ async def test_keyword_create_duplicated(
 
         assert len(kws) == 1
         assert kws[0].id == kw_data["id"]
+
+
+async def test_keyword_create_case_insensitive(
+    async_client: TestClient,
+):
+    word = f'aA_{uuid4()}'
+    create_data = {
+        "word": word
+    }
+    resp = await async_client.post(f"/keywords/", json=create_data)
+    assert resp.status_code == 201
+    kw_data = resp.json()
+    assert kw_data["word"] == word.lower()
+
+
+async def test_keyword_create_duplicated_case_insensitive(
+    async_client: TestClient,
+):
+    word_1 = f'aA_{uuid4()}'
+    word_2 = word_1.title()
+    create_data_1 = {
+        "word": word_1
+    }
+    resp1 = await async_client.post(f"/keywords/", json=create_data_1)
+    assert resp1.status_code == 201
+    resp1_json = resp1.json()
+
+    create_data_2 = {
+        "word": word_2
+    }
+    resp2 = await async_client.post(f"/keywords/", json=create_data_2)
+    assert resp2.status_code == 200
+    resp2_json = resp2.json()
+
+    assert resp2_json["word"] == resp1_json["word"]
+    assert resp2_json["id"] == resp1_json["id"]

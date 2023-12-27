@@ -60,21 +60,21 @@ async def get_keywords_dep(
         return res
 
 
-
 async def create_keyword_dep(
     keyword_data: KeywordCreate,
     session: Annotated[AsyncSession, Depends(get_async_session)]
 ) -> Tuple[KeywordInDB, bool]:
 
+    word = keyword_data.word.lower()
     # Check whether the keyword already exists
-    st = select(KeywordInDB).where(col(KeywordInDB.word) == keyword_data.word)
+    st = select(KeywordInDB).where(col(KeywordInDB.word) == word)
     keyword = await session.scalar(st)
     if keyword:
         return (keyword, False)
 
     # Creating the keyword
     keyword = KeywordInDB(
-        word=keyword_data.word
+        word=word
     )
     session.add(keyword)
     await session.commit()
