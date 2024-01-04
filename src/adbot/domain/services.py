@@ -421,7 +421,8 @@ class AdBotServices(AsyncMixin):
                                     # ]
                                 )
                                 # user.forward_queue.append(msg)
-                                msg.users.append(user)
+                                if user not in msg.users:
+                                    msg.users.append(user)
                                 self._updated_uids.add(user.id)
                     msg.processed = True
                 await session.commit()
